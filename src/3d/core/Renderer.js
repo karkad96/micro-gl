@@ -8,6 +8,18 @@ import { AmbientLight } from '../lights/AmbientLight.js';
 // FrameUniforms: mat4x4f (64) + three vec3f padded to 16 bytes each
 // = 112 bytes, matching the WGSL struct in Material.js.
 const FRAME_UNIFORM_SIZE = 112;
+// Float offsets of the FrameUniforms fields; the skipped indices
+// (19, 23, 27) are the vec3f padding.
+const VIEW_PROJECTION = 0;
+const LIGHT_DIRECTION = 16;
+const LIGHT_COLOR = 20;
+const AMBIENT_COLOR = 24;
+
+// Float offsets of the ObjectUniforms fields, matching the WGSL struct
+// in Material.js (two mat4x4f, then a vec4f).
+const MODEL_MATRIX = 0;
+const NORMAL_MATRIX = 16;
+const OBJECT_COLOR = 32;
 
 /**
  * The WebGPU renderer. Owns the device, the canvas swap chain and the
@@ -24,6 +36,8 @@ export class Renderer {
     this.device = null;
     this.context = null;
     this.format = null;
+    /** How many objects the last render() call drew. */
+    this.drawCount = 0;
 
     this._resources = null;
     this._depthTexture = null;
@@ -109,11 +123,14 @@ export class Renderer {
     });
 
     pass.setBindGroup(0, this._frameBindGroup);
+    let drawCount = 0;
     scene.traverse((object) => {
       if (object instanceof Mesh && object.visible) {
         this._drawMesh(pass, object);
+        drawCount++;
       }
     });
+    this.drawCount = drawCount;
 
     pass.end();
     this.device.queue.submit([encoder.finish()]);
@@ -135,28 +152,28 @@ export class Renderer {
     });
 
     const data = this._frameData;
-    data.set(camera.viewProjectionMatrix.elements, 0);
+    data.set(camera.viewProjectionMatrix.elements, VIEW_PROJECTION);
 
     if (directional) {
       const dir = directional.direction;
       const len = dir.length() || 1;
-      data[16] = dir.x / len;
-      data[17] = dir.y / len;
-      data[18] = dir.z / len;
-      data[20] = directional.color[0] * directional.intensity;
-      data[21] = directional.color[1] * directional.intensity;
-      data[22] = directional.color[2] * directional.intensity;
+      data[LIGHT_DIRECTION] = dir.x / len;
+      data[LIGHT_DIRECTION + 1] = dir.y / len;
+      data[LIGHT_DIRECTION + 2] = dir.z / len;
+      data[LIGHT_COLOR] = directional.color[0] * directional.intensity;
+      data[LIGHT_COLOR + 1] = directional.color[1] * directional.intensity;
+      data[LIGHT_COLOR + 2] = directional.color[2] * directional.intensity;
     } else {
-      data[16] = 0;
-      data[17] = -1;
-      data[18] = 0;
-      data[20] = 0;
-      data[21] = 0;
-      data[22] = 0;
+      data[LIGHT_DIRECTION] = 0;
+      data[LIGHT_DIRECTION + 1] = -1;
+      data[LIGHT_DIRECTION + 2] = 0;
+      data[LIGHT_COLOR] = 0;
+      data[LIGHT_COLOR + 1] = 0;
+      data[LIGHT_COLOR + 2] = 0;
     }
-    data[24] = ambientR;
-    data[25] = ambientG;
-    data[26] = ambientB;
+    data[AMBIENT_COLOR] = ambientR;
+    data[AMBIENT_COLOR + 1] = ambientG;
+    data[AMBIENT_COLOR + 2] = ambientB;
 
     this.device.queue.writeBuffer(this._frameUniformBuffer, 0, data);
   }
@@ -168,14 +185,14 @@ export class Renderer {
 
     // Per-object uniforms: model matrix, normal matrix, color.
     const data = meshGPU.data;
-    data.set(mesh.worldMatrix.elements, 0);
+    data.set(mesh.worldMatrix.elements, MODEL_MATRIX);
     this._normalMatrix.copy(mesh.worldMatrix).invert().transpose();
-    data.set(this._normalMatrix.elements, 16);
+    data.set(this._normalMatrix.elements, NORMAL_MATRIX);
     const color = mesh.material.color;
-    data[32] = color[0];
-    data[33] = color[1];
-    data[34] = color[2];
-    data[35] = color.length > 3 ? color[3] : 1;
+    data[OBJECT_COLOR] = color[0];
+    data[OBJECT_COLOR + 1] = color[1];
+    data[OBJECT_COLOR + 2] = color[2];
+    data[OBJECT_COLOR + 3] = color.length > 3 ? color[3] : 1;
     this.device.queue.writeBuffer(meshGPU.uniformBuffer, 0, data);
 
     pass.setPipeline(pipeline);

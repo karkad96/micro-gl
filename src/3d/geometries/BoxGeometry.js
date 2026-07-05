@@ -1,4 +1,4 @@
-import { Geometry } from './Geometry.js';
+import { Geometry, VERTEX_SIZE } from './Geometry.js';
 
 /**
  * An axis-aligned box centered on the origin, with flat-shaded faces
@@ -37,7 +37,7 @@ function buildFace(
   const widthHalf = planeWidth / 2;
   const heightHalf = planeHeight / 2;
   const depthHalf = planeDepth / 2;
-  const firstVertex = vertices.length / 8;
+  const firstVertex = vertices.length / VERTEX_SIZE;
 
   for (let iy = 0; iy < 2; iy++) {
     const y = iy * planeHeight - heightHalf;

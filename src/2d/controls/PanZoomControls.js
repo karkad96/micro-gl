@@ -29,6 +29,7 @@ export class PanZoomControls {
     this._lastY = 0;
 
     this._onPointerDown = (e) => {
+      if (!this.enabled) return;
       this._dragging = true;
       // Right button pans; Alt + left button rotates.
       this._panning = e.button === 2;
@@ -62,7 +63,7 @@ export class PanZoomControls {
     // A plain right-click keeps the browser's default menu; if the user
     // dragged (panned) more than a few pixels, block it.
     this._onContextMenu = (e) => {
-      if (this._panDistance > 3) e.preventDefault();
+      if (this.enabled && this._panDistance > 3) e.preventDefault();
     };
     this._onWheel = (e) => {
       e.preventDefault();

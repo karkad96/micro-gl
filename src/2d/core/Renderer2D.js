@@ -7,6 +7,11 @@ import { initWebGPU } from '../../core/initWebGPU.js';
 // this layout, so the camera matrix is uploaded directly.
 const FRAME_UNIFORM_SIZE = 48;
 
+// Float offsets of the ObjectUniforms fields, matching the WGSL struct
+// in Material2D.js (a mat3x3f — 12 floats with padding — then a vec4f).
+const TRANSFORM = 0;
+const OBJECT_COLOR = 12;
+
 /**
  * The 2D renderer. Same shape as the 3D Renderer — one render pass,
  * lazy GPU resources — but with everything a flat scene doesn't need
@@ -29,6 +34,8 @@ export class Renderer2D {
     this.device = null;
     this.context = null;
     this.format = null;
+    /** How many shapes the last render() call drew. */
+    this.drawCount = 0;
 
     this._resources = null;
     this._drawList = [];
@@ -95,6 +102,7 @@ export class Renderer2D {
       }
     });
     drawList.sort((a, b) => a.zIndex - b.zIndex);
+    this.drawCount = drawList.length;
 
     const encoder = this.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
@@ -124,12 +132,12 @@ export class Renderer2D {
 
     // Per-object uniforms: world transform, color.
     const data = shapeGPU.data;
-    data.set(shape.worldMatrix.elements, 0);
+    data.set(shape.worldMatrix.elements, TRANSFORM);
     const color = shape.material.color;
-    data[12] = color[0];
-    data[13] = color[1];
-    data[14] = color[2];
-    data[15] = color.length > 3 ? color[3] : 1;
+    data[OBJECT_COLOR] = color[0];
+    data[OBJECT_COLOR + 1] = color[1];
+    data[OBJECT_COLOR + 2] = color[2];
+    data[OBJECT_COLOR + 3] = color.length > 3 ? color[3] : 1;
     this.device.queue.writeBuffer(shapeGPU.uniformBuffer, 0, data);
 
     pass.setPipeline(pipeline);

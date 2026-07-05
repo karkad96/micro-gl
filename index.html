@@ -57,6 +57,32 @@
         border-color: #4a6ab8;
         color: #fff;
       }
+      #btn-stress {
+        margin-left: 10px;
+      }
+      #btn-stress.active {
+        background: #8f3350;
+        border-color: #b84a6a;
+      }
+      #fps {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        padding: 6px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 6px;
+        background: rgba(18, 22, 34, 0.85);
+        color: #99a;
+        font: 12px/1.5 ui-monospace, Consolas, monospace;
+        text-align: right;
+        user-select: none;
+        pointer-events: none;
+      }
+      #fps .num {
+        font-size: 18px;
+        font-weight: 600;
+        color: #fff;
+      }
     </style>
   </head>
   <body>
@@ -64,6 +90,11 @@
     <div id="hud">
       <button id="btn-3d" class="active">3D scene</button>
       <button id="btn-2d">2D scene</button>
+      <button id="btn-stress">Stress: off</button>
+    </div>
+    <div id="fps">
+      <div><span class="num" id="fps-value">--</span> fps</div>
+      <div id="fps-detail">-- ms &middot; 0 objects</div>
     </div>
     <div id="error"></div>
     <script type="module" src="./main.js"></script>

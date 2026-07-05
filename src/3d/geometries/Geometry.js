@@ -43,7 +43,7 @@ export class Geometry {
   }
 
   get vertexCount() {
-    return this.vertices.length / 8;
+    return this.vertices.length / VERTEX_SIZE;
   }
 
   get indexCount() {

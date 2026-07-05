@@ -25,6 +25,8 @@ export class Object2D {
 
     this.localMatrix = new Mat3();
     this.worldMatrix = new Mat3();
+    /** Per-object GPU resources, created lazily by the renderer (see GPUResources2D). */
+    this._gpu = null;
   }
 
   add(child) {
@@ -66,5 +68,22 @@ export class Object2D {
     for (const child of this.children) {
       child.traverse(callback);
     }
+  }
+
+  /**
+   * Destroys the per-object GPU resources the renderer created for this
+   * object and its descendants (see GPUResources2D), releasing the
+   * memory right away instead of waiting for GC. Geometry buffers are
+   * left alone: geometries may be shared between objects. Drawing a
+   * disposed object again just re-creates its resources.
+   */
+  dispose() {
+    this.traverse((object) => {
+      if (object._gpu) {
+        object._gpu.uniformBuffer.destroy();
+        object._gpu = null;
+      }
+    });
+    return this;
   }
 }
