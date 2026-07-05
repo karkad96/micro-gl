@@ -1,7 +1,7 @@
 import { Mesh } from './Mesh.js';
 import { Mat4 } from '../../math/Mat4.js';
-import { GPUResources } from './GPUResources.js';
-import { initWebGPU } from '../../core/initWebGPU.js';
+import { GpuResources } from './GpuResources.js';
+import { initWebGpu } from '../../core/initWebGpu.js';
 import { DirectionalLight } from '../lights/DirectionalLight.js';
 import { AmbientLight } from '../lights/AmbientLight.js';
 
@@ -23,7 +23,7 @@ const OBJECT_COLOR = 32;
 
 /**
  * The WebGPU renderer. Owns the device, the canvas swap chain and the
- * depth buffer; per-object GPU resources live in `GPUResources`.
+ * depth buffer; per-object GPU resources live in `GpuResources`.
  *
  * Usage:
  *   const renderer = new Renderer(canvas);
@@ -50,18 +50,18 @@ export class Renderer {
    * Requests the adapter/device and configures the canvas. Must be
    * awaited before rendering. Pass another already-initialized renderer
    * on the same canvas as `shared` to reuse its GPU device (a canvas
-   * can only be configured for one device, so e.g. a Renderer2D and a
+   * can only be configured for one device, so e.g. a Renderer2d and a
    * Renderer driving the same canvas must share one).
    *
    * @param {{device, context, format}} [shared]
    */
   async init(shared) {
-    const gpu = shared || (await initWebGPU(this.canvas));
+    const gpu = shared || (await initWebGpu(this.canvas));
     this.device = gpu.device;
     this.context = gpu.context;
     this.format = gpu.format;
 
-    this._resources = new GPUResources(this.device, this.format);
+    this._resources = new GpuResources(this.device, this.format);
 
     this._frameUniformBuffer = this.device.createBuffer({
       size: FRAME_UNIFORM_SIZE,

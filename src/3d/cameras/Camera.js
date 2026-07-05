@@ -1,4 +1,4 @@
-import { Object3D } from '../core/Object3D.js';
+import { Object3d } from '../core/Object3d.js';
 import { Vec3 } from '../../math/Vec3.js';
 import { Mat4 } from '../../math/Mat4.js';
 
@@ -14,7 +14,7 @@ import { Mat4 } from '../../math/Mat4.js';
  * position + target (not from `rotation`), and is expected to be a
  * direct child of the scene (or unparented).
  */
-export class Camera extends Object3D {
+export class Camera extends Object3d {
   /**
    * @param {number} aspect width / height
    */

@@ -9,7 +9,7 @@
  * The renderer lazily creates the GPU buffers the first time the
  * geometry is drawn and stores them on `_gpu`.
  */
-export class Geometry2D {
+export class Geometry2d {
   /**
    * @param {Float32Array|number[]} vertices interleaved vertex data
    * @param {Uint32Array|number[]}  indices  triangle indices

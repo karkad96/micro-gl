@@ -1,4 +1,4 @@
-import { Object3D } from '../core/Object3D.js';
+import { Object3d } from '../core/Object3d.js';
 import { Vec3 } from '../../math/Vec3.js';
 
 /**
@@ -6,7 +6,7 @@ import { Vec3 } from '../../math/Vec3.js';
  * like the sun. The renderer uses the first DirectionalLight it
  * finds in the scene.
  */
-export class DirectionalLight extends Object3D {
+export class DirectionalLight extends Object3d {
   /**
    * @param {number[]} color     [r, g, b] in the 0..1 range
    * @param {number}   intensity brightness multiplier

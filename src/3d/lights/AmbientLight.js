@@ -1,11 +1,11 @@
-import { Object3D } from '../core/Object3D.js';
+import { Object3d } from '../core/Object3d.js';
 
 /**
  * A light that illuminates every surface equally, regardless of
  * orientation. Used to keep shadows from being pitch black.
  * Multiple AmbientLights in a scene are added together.
  */
-export class AmbientLight extends Object3D {
+export class AmbientLight extends Object3d {
   /**
    * @param {number[]} color     [r, g, b] in the 0..1 range
    * @param {number}   intensity brightness multiplier

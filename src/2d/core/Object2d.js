@@ -3,11 +3,11 @@ import { Mat3 } from '../../math/Mat3.js';
 
 /**
  * Base class for everything that lives in the 2D scene graph — the flat
- * counterpart of Object3D. The transform is genuinely 2D: a Vec2
+ * counterpart of Object3d. The transform is genuinely 2D: a Vec2
  * position, a single rotation angle and a Vec2 scale, composed into 3x3
  * matrices instead of 4x4.
  */
-export class Object2D {
+export class Object2d {
   constructor() {
     this.position = new Vec2(0, 0);
     /** Rotation around the object's origin, in radians (counter-clockwise). */
@@ -25,7 +25,7 @@ export class Object2D {
 
     this.localMatrix = new Mat3();
     this.worldMatrix = new Mat3();
-    /** Per-object GPU resources, created lazily by the renderer (see GPUResources2D). */
+    /** Per-object GPU resources, created lazily by the renderer (see GpuResources2d). */
     this._gpu = null;
   }
 
@@ -72,7 +72,7 @@ export class Object2D {
 
   /**
    * Destroys the per-object GPU resources the renderer created for this
-   * object and its descendants (see GPUResources2D), releasing the
+   * object and its descendants (see GpuResources2d), releasing the
    * memory right away instead of waiting for GC. Geometry buffers are
    * left alone: geometries may be shared between objects. Drawing a
    * disposed object again just re-creates its resources.

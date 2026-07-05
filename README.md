@@ -48,17 +48,17 @@ src/
     Mat3.js           3x3 affine transform, stored in the padded column
                       layout WGSL uses for mat3x3f uniforms
   core/               shared WebGPU plumbing
-    initWebGPU.js     adapter/device/canvas setup (one device per canvas —
+    initWebGpu.js     adapter/device/canvas setup (one device per canvas —
                       renderers on the same canvas share it)
 
   3d/                 the 3D engine
     core/
-      Object3D.js     scene-graph node: transform + children
+      Object3d.js     scene-graph node: transform + children
       Scene.js        scene root, holds the background color
       Mesh.js         geometry + material
       Raycaster.js    pointer picking via ray vs. bounding-box tests
       Renderer.js     swap chain, depth buffer, render pass
-      GPUResources.js lazy caches: pipelines, vertex/index/uniform buffers,
+      GpuResources.js lazy caches: pipelines, vertex/index/uniform buffers,
                       bind groups
     cameras/
       Camera.js       shared base: lookAt target + view/projection matrices
@@ -82,25 +82,25 @@ src/
 
   2d/                 the 2D engine — flat counterparts of the 3D classes
     core/
-      Object2D.js     scene-graph node: Vec2 position, one rotation angle,
+      Object2d.js     scene-graph node: Vec2 position, one rotation angle,
                       zIndex draw order
-      Scene2D.js      scene root, holds the background color
-      Shape2D.js      geometry + material (the 2D Mesh)
-      Renderer2D.js   no depth buffer: zIndex sorting + alpha blending
-      GPUResources2D.js lazy caches for the 2D pipelines and buffers
+      Scene2d.js      scene root, holds the background color
+      Shape2d.js      geometry + material (the 2D Mesh)
+      Renderer2d.js   no depth buffer: zIndex sorting + alpha blending
+      GpuResources2d.js lazy caches for the 2D pipelines and buffers
     cameras/
-      Camera2D.js     pan/zoom/rotation as a single Mat3, no perspective
+      Camera2d.js     pan/zoom/rotation as a single Mat3, no perspective
     controls/
       PanZoomControls.js  right-drag-to-pan / scroll-to-zoom / alt-drag-to-spin
-      DragControls2D.js   click-to-select and drag shapes around
+      DragControls2d.js   click-to-select and drag shapes around
     geometries/
-      Geometry2D.js   base class (interleaved position/uv vertices) +
+      Geometry2d.js   base class (interleaved position/uv vertices) +
                       containsPoint for raycaster-free picking
       RectGeometry.js
       CircleGeometry.js
     materials/
-      Material2D.js   base class + shared WGSL vertex shader and uniform structs
-      BasicMaterial2D.js  flat color, alpha-blended
+      Material2d.js   base class + shared WGSL vertex shader and uniform structs
+      BasicMaterial2d.js  flat color, alpha-blended
 ```
 
 ## Minimal usage
@@ -147,27 +147,27 @@ requestAnimationFrame(frame);
 
 ```js
 import {
-  Renderer2D,
-  Scene2D,
-  Shape2D,
-  Camera2D,
+  Renderer2d,
+  Scene2d,
+  Shape2d,
+  Camera2d,
   RectGeometry,
-  BasicMaterial2D,
+  BasicMaterial2d,
 } from './src/index.js';
 
-const renderer = new Renderer2D(document.querySelector('canvas'));
+const renderer = new Renderer2d(document.querySelector('canvas'));
 await renderer.init();
 // (to share a canvas with a 3D Renderer, init that first and pass it:
 //  await renderer2d.init(renderer3d) — one GPU device per canvas)
 
-const scene = new Scene2D();
-const box = new Shape2D(
+const scene = new Scene2d();
+const box = new Shape2d(
   new RectGeometry(2, 1),
-  new BasicMaterial2D({ color: [1, 0.4, 0.1] }),
+  new BasicMaterial2d({ color: [1, 0.4, 0.1] }),
 );
 scene.add(box);
 
-const camera = new Camera2D(4, innerWidth / innerHeight);
+const camera = new Camera2d(4, innerWidth / innerHeight);
 
 renderer.setSize(innerWidth, innerHeight);
 function frame() {

@@ -5,22 +5,22 @@
 // vertex count.
 
 import {
-  Object3D,
+  Object3d,
   Mesh,
   BoxGeometry,
   SphereGeometry,
   LambertMaterial,
-  Object2D,
-  Shape2D,
+  Object2d,
+  Shape2d,
   RectGeometry,
   CircleGeometry,
-  BasicMaterial2D,
+  BasicMaterial2d,
 } from './src/index.js';
 
 /** Object counts the stress button cycles through (0 = off). */
 export const STRESS_LEVELS = [0, 500, 2000, 8000];
 
-// Shared geometries — GPUResources caches vertex/index buffers per
+// Shared geometries — GpuResources caches vertex/index buffers per
 // geometry instance, so thousands of objects reuse these four buffers.
 // Kept low-poly on purpose.
 const boxGeometry = new BoxGeometry(0.5, 0.5, 0.5);
@@ -44,8 +44,8 @@ function hsl(h, s, l) {
  *   count — the current level
  */
 export function createStressTest(scene, scene2d) {
-  const root3d = new Object3D();
-  const root2d = new Object2D();
+  const root3d = new Object3d();
+  const root2d = new Object2d();
   scene.add(root3d);
   scene2d.add(root2d);
 
@@ -98,9 +98,9 @@ export function createStressTest(scene, scene2d) {
     for (let i = 0; i < n; i++) {
       const color = hsl(Math.random(), 0.65, 0.6);
       if (Math.random() < 0.35) color.push(0.55);
-      const shape = new Shape2D(
+      const shape = new Shape2d(
         i % 2 ? rectGeometry : circleGeometry,
-        new BasicMaterial2D({ color }),
+        new BasicMaterial2d({ color }),
       );
       shape.position.set(
         (Math.random() * 2 - 1) * spread,

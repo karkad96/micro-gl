@@ -1,19 +1,36 @@
 /**
  * Base class for materials. A material is essentially a WGSL shader plus
- * per-object parameters (currently just a color).
+ * per-object parameters (currently just a color) and the fixed-function
+ * pipeline state used to draw with it (topology, culling, winding).
  *
  * Every shader shares the same uniform interface:
  *   @group(0) — per-frame data (camera + lights), owned by the renderer
  *   @group(1) — per-object data (transforms + color)
  * The renderer compiles one render pipeline per material class and
- * caches it, so many meshes can share the same shader.
+ * pipeline-state combination and caches it, so many meshes can share
+ * the same shader.
  */
 export class Material {
   /**
-   * @param {{color?: number[]}} options color as [r, g, b] in 0..1
+   * @param {object} [options]
+   * @param {number[]} [options.color]    [r, g, b] in 0..1
+   * @param {GPUPrimitiveTopology} [options.topology]
+   *   'triangle-list' (default), 'triangle-strip', 'line-list',
+   *   'line-strip' or 'point-list'
+   * @param {GPUCullMode}  [options.cullMode]  'back' (default), 'front' or
+   *   'none'; only applies to triangle topologies
+   * @param {GPUFrontFace} [options.frontFace] 'ccw' (default) or 'cw'
    */
-  constructor({ color = [1, 1, 1] } = {}) {
+  constructor({
+    color = [1, 1, 1],
+    topology = 'triangle-list',
+    cullMode = 'back',
+    frontFace = 'ccw',
+  } = {}) {
     this.color = color;
+    this.topology = topology;
+    this.cullMode = cullMode;
+    this.frontFace = frontFace;
   }
 
   /** Full WGSL source with `vs` and `fs` entry points. Subclasses provide the fragment stage. */

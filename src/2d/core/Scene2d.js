@@ -1,10 +1,10 @@
-import { Object2D } from './Object2D.js';
+import { Object2d } from './Object2d.js';
 
 /**
  * Root of the 2D scene graph. Add shapes to it, then pass it to
  * `renderer2d.render(scene, camera)`.
  */
-export class Scene2D extends Object2D {
+export class Scene2d extends Object2d {
   constructor() {
     super();
     /** Clear color as [r, g, b, a] in the 0..1 range. */

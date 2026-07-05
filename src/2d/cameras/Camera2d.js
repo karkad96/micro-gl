@@ -1,4 +1,4 @@
-import { Object2D } from '../core/Object2D.js';
+import { Object2d } from '../core/Object2d.js';
 import { Mat3 } from '../../math/Mat3.js';
 
 /**
@@ -10,7 +10,7 @@ import { Mat3 } from '../../math/Mat3.js';
  * world units) and `aspect`; the renderer keeps `aspect` in sync with
  * the canvas every frame. Expected to be unparented, like the 3D camera.
  */
-export class Camera2D extends Object2D {
+export class Camera2d extends Object2d {
   /**
    * @param {number} size   half of the visible height in world units
    * @param {number} aspect width / height

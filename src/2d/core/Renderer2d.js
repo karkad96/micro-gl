@@ -1,14 +1,14 @@
-import { Shape2D } from './Shape2D.js';
-import { GPUResources2D } from './GPUResources2D.js';
-import { initWebGPU } from '../../core/initWebGPU.js';
+import { Shape2d } from './Shape2d.js';
+import { GpuResources2d } from './GpuResources2d.js';
+import { initWebGpu } from '../../core/initWebGpu.js';
 
 // FrameUniforms: one mat3x3f (48 bytes, columns padded to 16 bytes),
-// matching the WGSL struct in Material2D.js. Mat3.elements already uses
+// matching the WGSL struct in Material2d.js. Mat3.elements already uses
 // this layout, so the camera matrix is uploaded directly.
 const FRAME_UNIFORM_SIZE = 48;
 
 // Float offsets of the ObjectUniforms fields, matching the WGSL struct
-// in Material2D.js (a mat3x3f — 12 floats with padding — then a vec4f).
+// in Material2d.js (a mat3x3f — 12 floats with padding — then a vec4f).
 const TRANSFORM = 0;
 const OBJECT_COLOR = 12;
 
@@ -20,7 +20,7 @@ const OBJECT_COLOR = 12;
  * so transparent shapes work out of the box.
  *
  * Usage:
- *   const renderer2d = new Renderer2D(canvas);
+ *   const renderer2d = new Renderer2d(canvas);
  *   await renderer2d.init();
  *   renderer2d.render(scene2d, camera2d);
  *
@@ -28,7 +28,7 @@ const OBJECT_COLOR = 12;
  * and pass it to the other's `init` so they use the same GPU device:
  *   await renderer2d.init(renderer3d);
  */
-export class Renderer2D {
+export class Renderer2d {
   constructor(canvas) {
     this.canvas = canvas;
     this.device = null;
@@ -49,12 +49,12 @@ export class Renderer2D {
    * @param {{device, context, format}} [shared]
    */
   async init(shared) {
-    const gpu = shared || (await initWebGPU(this.canvas));
+    const gpu = shared || (await initWebGpu(this.canvas));
     this.device = gpu.device;
     this.context = gpu.context;
     this.format = gpu.format;
 
-    this._resources = new GPUResources2D(this.device, this.format);
+    this._resources = new GpuResources2d(this.device, this.format);
 
     this._frameUniformBuffer = this.device.createBuffer({
       size: FRAME_UNIFORM_SIZE,
@@ -97,7 +97,7 @@ export class Renderer2D {
     const drawList = this._drawList;
     drawList.length = 0;
     scene.traverse((object) => {
-      if (object instanceof Shape2D && object.visible) {
+      if (object instanceof Shape2d && object.visible) {
         drawList.push(object);
       }
     });

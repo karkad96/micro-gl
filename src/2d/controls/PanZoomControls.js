@@ -1,5 +1,5 @@
 /**
- * Mouse / touch controls for a Camera2D: right-drag to pan, scroll to
+ * Mouse / touch controls for a Camera2d: right-drag to pan, scroll to
  * zoom (toward the cursor), Alt + left-drag to spin the view. A
  * right-click without dragging still opens the browser context menu.
  *

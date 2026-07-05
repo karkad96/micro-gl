@@ -9,18 +9,20 @@ export const OBJECT_UNIFORM_SIZE = 144;
  * materials and meshes, so scene objects stay plain data:
  *
  *   - the bind group layouts / pipeline layout shared by all pipelines
- *   - one render pipeline per material class
+ *   - one render pipeline per material class + pipeline state
+ *     (topology, cull mode, front face)
  *   - vertex + index buffers per geometry
  *   - a small uniform buffer + bind group per mesh
  *
  * Everything is created lazily on first use and cached on the object
  * (`_gpu`) or in a map keyed by material class.
  */
-export class GPUResources {
+export class GpuResources {
   constructor(device, format) {
     this.device = device;
     this.format = format;
-    this._pipelines = new Map(); // material class -> GPURenderPipeline
+    // material class -> Map of pipeline-state key -> GPURenderPipeline
+    this._pipelines = new Map();
 
     // Bind group 0: per-frame uniforms (camera + lights).
     this.frameBindGroupLayout = device.createBindGroupLayout({
@@ -87,11 +89,27 @@ export class GPUResources {
     return mesh._gpu;
   }
 
-  /** The render pipeline for a material's class (compiled once, shared). */
+  /**
+   * The render pipeline for a material's class and pipeline state
+   * (topology, cull mode, front face). Compiled once per combination
+   * and shared by every material instance that matches.
+   */
   pipelineFor(material) {
-    const key = material.constructor;
-    let pipeline = this._pipelines.get(key);
+    const { topology, cullMode, frontFace } = material;
+    let variants = this._pipelines.get(material.constructor);
+    if (!variants) {
+      variants = new Map();
+      this._pipelines.set(material.constructor, variants);
+    }
+    const stateKey = `${topology}|${cullMode}|${frontFace}`;
+    let pipeline = variants.get(stateKey);
     if (!pipeline) {
+      const primitive = { topology, cullMode, frontFace };
+      // Indexed draws on strip topologies must declare the index format
+      // up front; the renderer always uses uint32 indices.
+      if (topology === 'triangle-strip' || topology === 'line-strip') {
+        primitive.stripIndexFormat = 'uint32';
+      }
       const module = this.device.createShaderModule({
         code: material.shaderCode,
       });
@@ -116,18 +134,14 @@ export class GPUResources {
           entryPoint: 'fs',
           targets: [{ format: this.format }],
         },
-        primitive: {
-          topology: 'triangle-list',
-          cullMode: 'back',
-          frontFace: 'ccw',
-        },
+        primitive,
         depthStencil: {
           format: 'depth24plus',
           depthWriteEnabled: true,
           depthCompare: 'less',
         },
       });
-      this._pipelines.set(key, pipeline);
+      variants.set(stateKey, pipeline);
     }
     return pipeline;
   }

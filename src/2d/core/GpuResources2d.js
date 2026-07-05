@@ -1,26 +1,27 @@
-import { VERTEX_STRIDE_2D } from '../geometries/Geometry2D.js';
+import { VERTEX_STRIDE_2D } from '../geometries/Geometry2d.js';
 
 // ObjectUniforms: mat3x3f (48, each column padded to 16 bytes) + vec4f (16)
-// = 64 bytes, matching the WGSL struct in Material2D.js.
+// = 64 bytes, matching the WGSL struct in Material2d.js.
 export const OBJECT_UNIFORM_SIZE_2D = 64;
 
 /**
- * Owns the GPU resources Renderer2D creates on behalf of geometries,
- * materials and shapes — the 2D counterpart of GPUResources, with the
+ * Owns the GPU resources Renderer2d creates on behalf of geometries,
+ * materials and shapes — the 2D counterpart of GpuResources, with the
  * same lazy caching scheme.
  *
  * The pipelines differ from the 3D ones where 2D differs from 3D:
  *   - alpha blending is enabled (shapes draw back-to-front, so
  *     transparency just works — no depth buffer involved)
  *   - no depth/stencil state (the 2D render pass has no depth attachment)
- *   - no culling: a negative scale flips a shape's winding and it should
- *     still be visible
+ *   - culling defaults to 'none': a negative scale flips a shape's
+ *     winding and it should still be visible
  */
-export class GPUResources2D {
+export class GpuResources2d {
   constructor(device, format) {
     this.device = device;
     this.format = format;
-    this._pipelines = new Map(); // material class -> GPURenderPipeline
+    // material class -> Map of pipeline-state key -> GPURenderPipeline
+    this._pipelines = new Map();
 
     // Bind group 0: per-frame uniforms (the camera matrix).
     this.frameBindGroupLayout = device.createBindGroupLayout({
@@ -87,11 +88,27 @@ export class GPUResources2D {
     return shape._gpu;
   }
 
-  /** The render pipeline for a material's class (compiled once, shared). */
+  /**
+   * The render pipeline for a material's class and pipeline state
+   * (topology, cull mode, front face). Compiled once per combination
+   * and shared by every material instance that matches.
+   */
   pipelineFor(material) {
-    const key = material.constructor;
-    let pipeline = this._pipelines.get(key);
+    const { topology, cullMode, frontFace } = material;
+    let variants = this._pipelines.get(material.constructor);
+    if (!variants) {
+      variants = new Map();
+      this._pipelines.set(material.constructor, variants);
+    }
+    const stateKey = `${topology}|${cullMode}|${frontFace}`;
+    let pipeline = variants.get(stateKey);
     if (!pipeline) {
+      const primitive = { topology, cullMode, frontFace };
+      // Indexed draws on strip topologies must declare the index format
+      // up front; the renderer always uses uint32 indices.
+      if (topology === 'triangle-strip' || topology === 'line-strip') {
+        primitive.stripIndexFormat = 'uint32';
+      }
       const module = this.device.createShaderModule({
         code: material.shaderCode,
       });
@@ -129,12 +146,9 @@ export class GPUResources2D {
             },
           ],
         },
-        primitive: {
-          topology: 'triangle-list',
-          cullMode: 'none',
-        },
+        primitive,
       });
-      this._pipelines.set(key, pipeline);
+      variants.set(stateKey, pipeline);
     }
     return pipeline;
   }

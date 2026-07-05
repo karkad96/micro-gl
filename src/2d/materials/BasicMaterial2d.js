@@ -1,10 +1,10 @@
-import { Material2D } from './Material2D.js';
+import { Material2d } from './Material2d.js';
 
 /**
  * Fills the shape with a flat color. Alpha below 1 shows through to
  * whatever was drawn underneath.
  */
-export class BasicMaterial2D extends Material2D {
+export class BasicMaterial2d extends Material2d {
   get fragmentShader() {
     return /* wgsl */ `
 @fragment

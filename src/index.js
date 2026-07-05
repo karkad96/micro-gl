@@ -10,10 +10,10 @@ export { Vec3 } from './math/Vec3.js';
 export { Mat4 } from './math/Mat4.js';
 export { Vec2 } from './math/Vec2.js';
 export { Mat3 } from './math/Mat3.js';
-export { initWebGPU } from './core/initWebGPU.js';
+export { initWebGpu } from './core/initWebGpu.js';
 
 // --- 3D engine --------------------------------------------------------------
-export { Object3D } from './3d/core/Object3D.js';
+export { Object3d } from './3d/core/Object3d.js';
 export { Raycaster } from './3d/core/Raycaster.js';
 export { Scene } from './3d/core/Scene.js';
 export { Mesh } from './3d/core/Mesh.js';
@@ -38,18 +38,18 @@ export { DirectionalLight } from './3d/lights/DirectionalLight.js';
 export { AmbientLight } from './3d/lights/AmbientLight.js';
 
 // --- 2D engine --------------------------------------------------------------
-export { Object2D } from './2d/core/Object2D.js';
-export { Scene2D } from './2d/core/Scene2D.js';
-export { Shape2D } from './2d/core/Shape2D.js';
-export { Renderer2D } from './2d/core/Renderer2D.js';
+export { Object2d } from './2d/core/Object2d.js';
+export { Scene2d } from './2d/core/Scene2d.js';
+export { Shape2d } from './2d/core/Shape2d.js';
+export { Renderer2d } from './2d/core/Renderer2d.js';
 
-export { Camera2D } from './2d/cameras/Camera2D.js';
+export { Camera2d } from './2d/cameras/Camera2d.js';
 export { PanZoomControls } from './2d/controls/PanZoomControls.js';
-export { DragControls2D } from './2d/controls/DragControls2D.js';
+export { DragControls2d } from './2d/controls/DragControls2d.js';
 
-export { Geometry2D } from './2d/geometries/Geometry2D.js';
+export { Geometry2d } from './2d/geometries/Geometry2d.js';
 export { RectGeometry } from './2d/geometries/RectGeometry.js';
 export { CircleGeometry } from './2d/geometries/CircleGeometry.js';
 
-export { Material2D } from './2d/materials/Material2D.js';
-export { BasicMaterial2D } from './2d/materials/BasicMaterial2D.js';
+export { Material2d } from './2d/materials/Material2d.js';
+export { BasicMaterial2d } from './2d/materials/BasicMaterial2d.js';

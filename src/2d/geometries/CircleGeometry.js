@@ -1,9 +1,9 @@
-import { Geometry2D } from './Geometry2D.js';
+import { Geometry2d } from './Geometry2d.js';
 
 /**
  * A circle centered on the origin, built as a triangle fan.
  */
-export class CircleGeometry extends Geometry2D {
+export class CircleGeometry extends Geometry2d {
   constructor(radius = 0.5, segments = 32) {
     // Center vertex, then one vertex per rim segment.
     const vertices = [0, 0, 0.5, 0.5];

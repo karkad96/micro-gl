@@ -2,7 +2,7 @@ import {
   Renderer,
   Scene,
   Mesh,
-  Object3D,
+  Object3d,
   PerspectiveCamera,
   OrthographicCamera,
   OrbitControls,
@@ -14,16 +14,16 @@ import {
   LambertMaterial,
   DirectionalLight,
   AmbientLight,
-  Renderer2D,
-  Scene2D,
-  Shape2D,
-  Object2D,
-  Camera2D,
+  Renderer2d,
+  Scene2d,
+  Shape2d,
+  Object2d,
+  Camera2d,
   PanZoomControls,
-  DragControls2D,
+  DragControls2d,
   RectGeometry,
   CircleGeometry,
-  BasicMaterial2D,
+  BasicMaterial2d,
 } from './src/index.js';
 import { createStressTest, STRESS_LEVELS } from './stress.js';
 
@@ -34,7 +34,7 @@ async function main() {
   // renderer's GPU device instead of requesting its own.
   const renderer = new Renderer(canvas);
   await renderer.init();
-  const renderer2d = new Renderer2D(canvas);
+  const renderer2d = new Renderer2d(canvas);
   await renderer2d.init(renderer);
 
   const world = buildScene3D();
@@ -90,7 +90,7 @@ function buildScene3D() {
   sphere.position.set(1.4, 0.75, 0);
   scene.add(sphere);
 
-  const pivot = new Object3D();
+  const pivot = new Object3d();
   pivot.position.copy(cube.position);
   scene.add(pivot);
 
@@ -110,41 +110,41 @@ function buildScene3D() {
  * scene: card + disc, and a satellite on a rotating pivot.
  */
 function buildScene2D() {
-  const scene = new Scene2D();
+  const scene = new Scene2d();
   scene.background = [0.07, 0.08, 0.12, 1];
 
-  const card = new Shape2D(
+  const card = new Shape2d(
     new RectGeometry(3, 2),
-    new BasicMaterial2D({ color: [0.9, 0.45, 0.15] }),
+    new BasicMaterial2d({ color: [0.9, 0.45, 0.15] }),
   );
   card.position.set(-2, 0.5);
   card.rotation = 0.2;
   scene.add(card);
 
-  const disc = new Shape2D(
+  const disc = new Shape2d(
     new CircleGeometry(1, 48),
-    new BasicMaterial2D({ color: [0.2, 0.65, 0.7] }),
+    new BasicMaterial2d({ color: [0.2, 0.65, 0.7] }),
   );
   disc.position.set(2, -0.5);
   scene.add(disc);
 
   // Semi-transparent, drawn on top of the card and disc — shows off
   // zIndex ordering and alpha blending.
-  const overlay = new Shape2D(
+  const overlay = new Shape2d(
     new RectGeometry(2.5, 2.5),
-    new BasicMaterial2D({ color: [0.85, 0.3, 0.5, 0.55] }),
+    new BasicMaterial2d({ color: [0.85, 0.3, 0.5, 0.55] }),
   );
   overlay.position.set(0.3, 0);
   overlay.zIndex = 1;
   scene.add(overlay);
 
-  const pivot = new Object2D();
+  const pivot = new Object2d();
   pivot.position.copy(disc.position);
   scene.add(pivot);
 
-  const satellite = new Shape2D(
+  const satellite = new Shape2d(
     new RectGeometry(0.4, 0.4),
-    new BasicMaterial2D({ color: [1, 0.9, 0.3] }),
+    new BasicMaterial2d({ color: [1, 0.9, 0.3] }),
   );
   satellite.position.set(1.6, 0);
   satellite.zIndex = 2;
@@ -171,7 +171,7 @@ function createView(canvas) {
   // Share the same target so orbiting stays in sync across both cameras.
   orthoCamera.target = perspCamera.target;
 
-  const camera2d = new Camera2D(4, aspect);
+  const camera2d = new Camera2d(4, aspect);
 
   return {
     canvas,
@@ -218,7 +218,7 @@ function setupDragging(view, world, world2d) {
     view.camera,
     view.canvas,
   );
-  view.dragControls2d = new DragControls2D(
+  view.dragControls2d = new DragControls2d(
     [world2d.card, world2d.disc, world2d.overlay],
     view.camera2d,
     view.canvas,

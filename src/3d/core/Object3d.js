@@ -6,7 +6,7 @@ import { Mat4 } from '../../math/Mat4.js';
  * Holds a transform (position / rotation / scale) and a list of children,
  * so objects can be parented to each other like in three.js.
  */
-export class Object3D {
+export class Object3d {
   constructor() {
     this.position = new Vec3(0, 0, 0);
     /** Euler angles in radians, applied in XYZ order. */
@@ -19,7 +19,7 @@ export class Object3D {
 
     this.localMatrix = new Mat4();
     this.worldMatrix = new Mat4();
-    /** Per-object GPU resources, created lazily by the renderer (see GPUResources). */
+    /** Per-object GPU resources, created lazily by the renderer (see GpuResources). */
     this._gpu = null;
   }
 
@@ -66,7 +66,7 @@ export class Object3D {
 
   /**
    * Destroys the per-object GPU resources the renderer created for this
-   * object and its descendants (see GPUResources), releasing the memory
+   * object and its descendants (see GpuResources), releasing the memory
    * right away instead of waiting for GC. Geometry buffers are left
    * alone: geometries may be shared between objects. Drawing a disposed
    * object again just re-creates its resources.

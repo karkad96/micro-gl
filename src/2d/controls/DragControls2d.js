@@ -19,9 +19,9 @@ const _worldPos = new Vec2();
  * Disable your camera controls in onDragStart / re-enable in onDragEnd
  * so panning doesn't fight the drag.
  */
-export class DragControls2D {
+export class DragControls2d {
   /**
-   * @param {Shape2D[]} objects shapes that can be selected and dragged
+   * @param {Shape2d[]} objects shapes that can be selected and dragged
    */
   constructor(objects, camera, domElement) {
     this.objects = objects;

@@ -51,7 +51,7 @@ Screenshot the REAL demo page. Ad-hoc test pages hang in
 - 3D boot shows `4 objects` (ground, cube, sphere, satellite); 2D shows
   `4 objects` (card, disc, overlay, satellite).
 - Stress button cycles 0 → 500 → 2,000 → 8,000 → off; counts are N + 4.
-  Cycling back to off exercises Object3D/Object2D `dispose()` — watch
+  Cycling back to off exercises Object3d/Object2d `dispose()` — watch
   the console for WebGPU validation errors (destroyed buffer use).
 - Drag with `page.mouse` (emits pointer events): cube is near screen
   center-left ~(550, 370) at boot; dragging it should brighten it, move
