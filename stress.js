@@ -1,27 +1,33 @@
-// Stress tests for both engines. Each engine gets a root group filled
-// with N spinning objects that all share a few geometries, so what is
-// being stressed is the per-object work — matrix updates, uniform
-// uploads and draw calls (plus the per-frame zIndex sort in 2D) — not
-// vertex count.
+// Stress tests for both engines, built on instanced rendering: each
+// engine gets a root group holding one InstancedMesh / InstancedShape2d
+// per geometry, so N spinning objects cost two draw calls and two
+// buffer uploads per frame. What is being stressed is the per-instance
+// CPU work — recomposing N matrices every frame — and the GPU's
+// appetite for instances, not draw-call overhead (crank the levels up
+// if your machine shrugs at 8,000).
 
 import {
   Object3d,
-  Mesh,
+  InstancedMesh,
   BoxGeometry,
   SphereGeometry,
   LambertMaterial,
   Object2d,
-  Shape2d,
+  InstancedShape2d,
   RectGeometry,
   CircleGeometry,
   BasicMaterial2d,
+  Vec3,
+  Vec2,
+  Mat4,
+  Mat3,
 } from './src/index.js';
 
 /** Object counts the stress button cycles through (0 = off). */
 export const STRESS_LEVELS = [0, 500, 2000, 8000];
 
 // Shared geometries — GpuResources caches vertex/index buffers per
-// geometry instance, so thousands of objects reuse these four buffers.
+// geometry instance, so every stress level reuses these four buffers.
 // Kept low-poly on purpose.
 const boxGeometry = new BoxGeometry(0.5, 0.5, 0.5);
 const sphereGeometry = new SphereGeometry(0.3, 12, 8);
@@ -49,69 +55,119 @@ export function createStressTest(scene, scene2d) {
   scene.add(root3d);
   scene2d.add(root2d);
 
-  const spins3d = []; // { object, speed } per stress mesh
-  const spins2d = [];
+  // One entry per instanced mesh/shape: the mesh plus the plain
+  // position/rotation/scale/speed state its instances animate from.
+  const groups3d = [];
+  const groups2d = [];
   let count = 0;
 
-  // Discards a root's children, disposing them so their per-object
-  // uniform buffers are released right away instead of waiting for GC.
-  function clear(root, spins) {
+  const matrix4 = new Mat4(); // scratch, recomposed per instance
+  const matrix3 = new Mat3();
+
+  // Discards a root's instanced children, disposing them so their
+  // uniform + instance buffers are released right away instead of
+  // waiting for GC.
+  function clear(root, groups) {
     for (const child of root.children) {
       child.parent = null;
       child.dispose();
     }
     root.children.length = 0;
-    spins.length = 0;
+    groups.length = 0;
   }
 
   function setLevel(n) {
     count = n;
-    clear(root3d, spins3d);
-    clear(root2d, spins2d);
+    clear(root3d, groups3d);
+    clear(root2d, groups2d);
+    if (!n) return;
 
     // 3D: a ring-shaped cloud hovering over the ground plane, wider as
-    // the count grows so density stays sane.
+    // the count grows so density stays sane. Half boxes, half spheres —
+    // one InstancedMesh each, colored per instance.
     const ringWidth = 2 + Math.sqrt(n) * 0.12;
-    for (let i = 0; i < n; i++) {
-      const mesh = new Mesh(
-        i % 2 ? boxGeometry : sphereGeometry,
-        new LambertMaterial({ color: hsl(Math.random(), 0.6, 0.55) }),
-      );
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 1.5 + Math.sqrt(Math.random()) * ringWidth;
-      mesh.position.set(
-        Math.cos(angle) * radius,
-        0.3 + Math.random() * 4,
-        Math.sin(angle) * radius,
-      );
-      mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
-      const s = 0.35 + Math.random() * 0.5;
-      mesh.scale.set(s, s, s);
+    for (const [geometry, groupCount] of [
+      [boxGeometry, Math.ceil(n / 2)],
+      [sphereGeometry, Math.floor(n / 2)],
+    ]) {
+      if (!groupCount) continue;
+      const mesh = new InstancedMesh(geometry, new LambertMaterial(), groupCount);
+      const instances = [];
+      for (let i = 0; i < groupCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 1.5 + Math.sqrt(Math.random()) * ringWidth;
+        const s = 0.35 + Math.random() * 0.5;
+        instances.push({
+          position: new Vec3(
+            Math.cos(angle) * radius,
+            0.3 + Math.random() * 4,
+            Math.sin(angle) * radius,
+          ),
+          rotation: new Vec3(Math.random() * Math.PI, Math.random() * Math.PI, 0),
+          scale: new Vec3(s, s, s),
+          speed: (Math.random() - 0.5) * 4,
+        });
+        mesh.setColorAt(i, hsl(Math.random(), 0.6, 0.55));
+      }
       root3d.add(mesh);
-      spins3d.push({ object: mesh, speed: (Math.random() - 0.5) * 4 });
+      groups3d.push({ mesh, instances });
+      writeInstances3d(groups3d[groups3d.length - 1]);
     }
 
-    // 2D: a confetti field of rects and circles. Random zIndex spread
-    // keeps the painter's-algorithm sort honest, and a third of the
-    // shapes are semi-transparent to exercise blending.
+    // 2D: a confetti field of rects and circles. A third of the
+    // instances are semi-transparent to exercise blending; each group
+    // draws as one unit in zIndex order.
     const spread = 3 + Math.sqrt(n) * 0.12;
-    for (let i = 0; i < n; i++) {
-      const color = hsl(Math.random(), 0.65, 0.6);
-      if (Math.random() < 0.35) color.push(0.55);
-      const shape = new Shape2d(
-        i % 2 ? rectGeometry : circleGeometry,
-        new BasicMaterial2d({ color }),
+    for (const [geometry, groupCount] of [
+      [rectGeometry, Math.ceil(n / 2)],
+      [circleGeometry, Math.floor(n / 2)],
+    ]) {
+      if (!groupCount) continue;
+      const shape = new InstancedShape2d(
+        geometry,
+        new BasicMaterial2d(),
+        groupCount,
       );
-      shape.position.set(
-        (Math.random() * 2 - 1) * spread,
-        (Math.random() * 2 - 1) * spread,
-      );
-      shape.rotation = Math.random() * Math.PI;
-      shape.scale.set(0.15 + Math.random() * 0.5, 0.15 + Math.random() * 0.5);
-      shape.zIndex = Math.floor(Math.random() * 4);
+      const instances = [];
+      for (let i = 0; i < groupCount; i++) {
+        instances.push({
+          position: new Vec2(
+            (Math.random() * 2 - 1) * spread,
+            (Math.random() * 2 - 1) * spread,
+          ),
+          rotation: Math.random() * Math.PI,
+          scale: new Vec2(
+            0.15 + Math.random() * 0.5,
+            0.15 + Math.random() * 0.5,
+          ),
+          speed: (Math.random() - 0.5) * 4,
+        });
+        const color = hsl(Math.random(), 0.65, 0.6);
+        if (Math.random() < 0.35) color.push(0.55);
+        shape.setColorAt(i, color);
+      }
       root2d.add(shape);
-      spins2d.push({ object: shape, speed: (Math.random() - 0.5) * 4 });
+      groups2d.push({ shape, instances });
+      writeInstances2d(groups2d[groups2d.length - 1]);
     }
+  }
+
+  function writeInstances3d({ mesh, instances }) {
+    for (let i = 0; i < instances.length; i++) {
+      const inst = instances[i];
+      matrix4.compose(inst.position, inst.rotation, inst.scale);
+      mesh.setMatrixAt(i, matrix4);
+    }
+    mesh.needsUpdate = true;
+  }
+
+  function writeInstances2d({ shape, instances }) {
+    for (let i = 0; i < instances.length; i++) {
+      const inst = instances[i];
+      matrix3.compose(inst.position, inst.rotation, inst.scale);
+      shape.setMatrixAt(i, matrix3);
+    }
+    shape.needsUpdate = true;
   }
 
   // Only the active engine's objects are animated — the inactive scene
@@ -119,12 +175,18 @@ export function createStressTest(scene, scene2d) {
   function update(dt, engine2D) {
     if (engine2D) {
       root2d.rotation += dt * 0.05;
-      for (const s of spins2d) s.object.rotation += s.speed * dt;
+      for (const group of groups2d) {
+        for (const inst of group.instances) inst.rotation += inst.speed * dt;
+        writeInstances2d(group);
+      }
     } else {
       root3d.rotation.y += dt * 0.05;
-      for (const s of spins3d) {
-        s.object.rotation.y += s.speed * dt;
-        s.object.rotation.x += s.speed * 0.6 * dt;
+      for (const group of groups3d) {
+        for (const inst of group.instances) {
+          inst.rotation.y += inst.speed * dt;
+          inst.rotation.x += inst.speed * 0.6 * dt;
+        }
+        writeInstances3d(group);
       }
     }
   }

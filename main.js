@@ -12,8 +12,10 @@ import {
   PlaneGeometry,
   BasicMaterial,
   LambertMaterial,
+  TextureMaterial,
   DirectionalLight,
   AmbientLight,
+  Texture,
   Renderer2d,
   Scene2d,
   Shape2d,
@@ -24,6 +26,7 @@ import {
   RectGeometry,
   CircleGeometry,
   BasicMaterial2d,
+  SpriteMaterial2d,
 } from './src/index.js';
 import { createStressTest, STRESS_LEVELS } from './stress.js';
 
@@ -37,8 +40,11 @@ async function main() {
   const renderer2d = new Renderer2d(canvas);
   await renderer2d.init(renderer);
 
-  const world = buildScene3D();
-  const world2d = buildScene2D();
+  // One texture serves both engines: their renderers share a GPU device,
+  // so the checkerboard is uploaded once and sampled by both.
+  const checker = makeCheckerTexture();
+  const world = buildScene3D(checker);
+  const world2d = buildScene2D(checker);
 
   const view = createView(canvas);
   setupDragging(view, world, world2d);
@@ -57,11 +63,30 @@ async function main() {
 }
 
 /**
- * The 3D scene: a lit ground plane, a cube and a sphere, plus a small
- * unlit satellite parented to a rotating pivot to show the scene graph
- * in action.
+ * A white/gray checkerboard drawn with the 2D canvas API — a texture
+ * without shipping image assets. White squares so material `color`
+ * tints show through.
  */
-function buildScene3D() {
+function makeCheckerTexture(squares = 8, size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cell = size / squares;
+  for (let y = 0; y < squares; y++) {
+    for (let x = 0; x < squares; x++) {
+      ctx.fillStyle = (x + y) % 2 ? '#9a9a9a' : '#ffffff';
+      ctx.fillRect(x * cell, y * cell, cell, cell);
+    }
+  }
+  return new Texture(canvas);
+}
+
+/**
+ * The 3D scene: a lit ground plane, a textured cube and a sphere, plus
+ * a small unlit satellite parented to a rotating pivot to show the
+ * scene graph in action.
+ */
+function buildScene3D(checker) {
   const scene = new Scene();
   scene.background = [0.05, 0.06, 0.09, 1];
 
@@ -78,7 +103,7 @@ function buildScene3D() {
 
   const cube = new Mesh(
     new BoxGeometry(1, 1, 1),
-    new LambertMaterial({ color: [0.9, 0.45, 0.15] }),
+    new TextureMaterial({ map: checker, color: [0.9, 0.45, 0.15] }),
   );
   cube.position.set(-1.2, 0.5, 0);
   scene.add(cube);
@@ -107,15 +132,15 @@ function buildScene3D() {
 /**
  * The 2D scene — genuinely flat: Vec2 positions, one rotation angle,
  * Mat3 transforms, zIndex draw order and alpha blending. Mirrors the 3D
- * scene: card + disc, and a satellite on a rotating pivot.
+ * scene: textured card + disc, and a satellite on a rotating pivot.
  */
-function buildScene2D() {
+function buildScene2D(checker) {
   const scene = new Scene2d();
   scene.background = [0.07, 0.08, 0.12, 1];
 
   const card = new Shape2d(
     new RectGeometry(3, 2),
-    new BasicMaterial2d({ color: [0.9, 0.45, 0.15] }),
+    new SpriteMaterial2d({ map: checker, color: [0.9, 0.45, 0.15] }),
   );
   card.position.set(-2, 0.5);
   card.rotation = 0.2;

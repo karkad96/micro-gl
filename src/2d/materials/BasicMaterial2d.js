@@ -9,7 +9,7 @@ export class BasicMaterial2d extends Material2d {
     return /* wgsl */ `
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
-  return uObject.color;
+  return objectColor(input);
 }
 `;
   }

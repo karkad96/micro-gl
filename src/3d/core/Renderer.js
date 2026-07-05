@@ -127,7 +127,7 @@ export class Renderer {
     scene.traverse((object) => {
       if (object instanceof Mesh && object.visible) {
         this._drawMesh(pass, object);
-        drawCount++;
+        drawCount += object.isInstanced ? object.count : 1;
       }
     });
     this.drawCount = drawCount;
@@ -179,9 +179,10 @@ export class Renderer {
   }
 
   _drawMesh(pass, mesh) {
+    const instanced = !!mesh.isInstanced;
     const geometryGPU = this._resources.geometryFor(mesh.geometry);
     const meshGPU = this._resources.meshFor(mesh);
-    const pipeline = this._resources.pipelineFor(mesh.material);
+    const pipeline = this._resources.pipelineFor(mesh.material, instanced);
 
     // Per-object uniforms: model matrix, normal matrix, color.
     const data = meshGPU.data;
@@ -198,7 +199,18 @@ export class Renderer {
     pass.setPipeline(pipeline);
     pass.setBindGroup(1, meshGPU.bindGroup);
     pass.setVertexBuffer(0, geometryGPU.vertexBuffer);
+    if (instanced) {
+      if (mesh.needsUpdate) {
+        this.device.queue.writeBuffer(
+          meshGPU.instanceBuffer,
+          0,
+          mesh.instanceData,
+        );
+        mesh.needsUpdate = false;
+      }
+      pass.setVertexBuffer(1, meshGPU.instanceBuffer);
+    }
     pass.setIndexBuffer(geometryGPU.indexBuffer, 'uint32');
-    pass.drawIndexed(mesh.geometry.indexCount);
+    pass.drawIndexed(mesh.geometry.indexCount, instanced ? mesh.count : 1);
   }
 }

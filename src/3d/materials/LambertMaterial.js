@@ -10,11 +10,12 @@ export class LambertMaterial extends Material {
     return /* wgsl */ `
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
+  let base = objectColor(input);
   let n = normalize(input.worldNormal);
   let toLight = normalize(-uFrame.lightDirection);
   let diffuse = max(dot(n, toLight), 0.0) * uFrame.lightColor;
   let lighting = uFrame.ambientColor + diffuse;
-  return vec4f(uObject.color.rgb * lighting, uObject.color.a);
+  return vec4f(base.rgb * lighting, base.a);
 }
 `;
   }

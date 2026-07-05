@@ -75,6 +75,7 @@ export class Object3d {
     this.traverse((object) => {
       if (object._gpu) {
         object._gpu.uniformBuffer.destroy();
+        if (object._gpu.instanceBuffer) object._gpu.instanceBuffer.destroy();
         object._gpu = null;
       }
     });

@@ -50,12 +50,18 @@ src/
   core/               shared WebGPU plumbing
     initWebGpu.js     adapter/device/canvas setup (one device per canvas —
                       renderers on the same canvas share it)
+    Texture.js        an image + sampler settings; assign to a material's
+                      `map` (uploaded lazily, shareable across engines)
+    generateMipmaps.js fills a texture's mip chain with a tiny render
+                      pass per level (WebGPU has no built-in way)
 
   3d/                 the 3D engine
     core/
       Object3d.js     scene-graph node: transform + children
       Scene.js        scene root, holds the background color
       Mesh.js         geometry + material
+      InstancedMesh.js  a mesh drawn N times in one call, each instance
+                      with its own transform + color
       Raycaster.js    pointer picking via ray vs. bounding-box tests
       Renderer.js     swap chain, depth buffer, render pass
       GpuResources.js lazy caches: pipelines, vertex/index/uniform buffers,
@@ -76,6 +82,8 @@ src/
       Material.js     base class + shared WGSL vertex shader and uniform structs
       BasicMaterial.js  unlit flat color
       LambertMaterial.js diffuse shading from a DirectionalLight + ambient
+      TextureMaterial.js LambertMaterial with a texture `map` for the
+                      surface color
     lights/
       DirectionalLight.js
       AmbientLight.js
@@ -86,6 +94,7 @@ src/
                       zIndex draw order
       Scene2d.js      scene root, holds the background color
       Shape2d.js      geometry + material (the 2D Mesh)
+      InstancedShape2d.js  the 2D InstancedMesh
       Renderer2d.js   no depth buffer: zIndex sorting + alpha blending
       GpuResources2d.js lazy caches for the 2D pipelines and buffers
     cameras/
@@ -101,6 +110,7 @@ src/
     materials/
       Material2d.js   base class + shared WGSL vertex shader and uniform structs
       BasicMaterial2d.js  flat color, alpha-blended
+      SpriteMaterial2d.js texture `map` times color — the 2D sprite
 ```
 
 ## Minimal usage
@@ -188,21 +198,34 @@ requestAnimationFrame(frame);
     ambient color. Written once per frame.
   - `@group(1)` _object_ uniforms — model matrix, normal matrix, color. Each
     mesh gets its own small uniform buffer and bind group (created lazily on
-    first draw).
-- **Pipelines** are compiled once per material class and cached, so any number
-  of meshes sharing a material class reuse the same `GPURenderPipeline`.
+    first draw). Materials with a `map` use a second layout that adds the
+    texture view and sampler to the same group.
+- **Pipelines** are compiled once per material class + pipeline state
+  (primitive topology, culling, textured or not, instanced or not) and
+  cached, so any number of meshes sharing a material class reuse the same
+  `GPURenderPipeline`.
 - **Geometries** upload one interleaved vertex buffer (position, normal, uv —
   32-byte stride) and one 32-bit index buffer, lazily on first draw.
+- **Textures** upload once with a full mip chain (generated level by level
+  with a tiny render pass — `generateMipmaps.js`) and get a sampler from
+  the Texture's settings.
+- **Instancing**: an `InstancedMesh` packs per-instance transform + color
+  into a second, instance-stepped vertex buffer and draws all instances
+  with one `drawIndexed`. The stress test (the HUD's Stress button) uses
+  this — 8,000 objects are two draw calls.
 - **render()** updates world matrices, writes the uniforms, records a single
   render pass with a `depth24plus` depth attachment, and submits it.
 
 ## Deliberate limitations (it's _micro_)
 
-- One directional light + ambient; no shadows, no textures yet.
+- One directional light + ambient; no shadows.
 - Cameras orient via `lookAt` target, not via their `rotation` Euler angles.
 - Opaque rendering only in 3D (no blending/transparency sorting); the 2D
   engine does blend, using painter's-algorithm zIndex sorting instead of a
   depth buffer.
+- Per-instance non-uniform scale skews instanced lighting normals (the
+  shader uses the instance matrix directly instead of its inverse
+  transpose).
 
-Natural next steps if you want to grow it: textures + samplers (a
-`TextureMaterial`), point lights, a wireframe/grid helper, and shadow mapping.
+Natural next steps if you want to grow it: point lights, transparency in
+3D, a wireframe/grid helper, and shadow mapping.

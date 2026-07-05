@@ -1,8 +1,8 @@
 /**
  * Base class for 2D materials, mirroring the 3D Material: a WGSL shader
- * plus per-object parameters (currently just a color) and the
- * fixed-function pipeline state used to draw with it (topology, culling,
- * winding).
+ * plus per-object parameters (a color and optionally a texture map) and
+ * the fixed-function pipeline state used to draw with it (topology,
+ * culling, winding).
  *
  * Every 2D shader shares the same uniform interface:
  *   @group(0) — per-frame data (the camera's view-projection Mat3)
@@ -19,6 +19,9 @@ export class Material2d {
    * @param {object} [options]
    * @param {number[]} [options.color] [r, g, b] or [r, g, b, a] in 0..1 —
    *   alpha below 1 blends with what is behind
+   * @param {Texture} [options.map] texture the shader can sample at the
+   *   shape's uvs — only used by materials whose fragment shader samples
+   *   it (see SpriteMaterial2d)
    * @param {GPUPrimitiveTopology} [options.topology]
    *   'triangle-list' (default), 'triangle-strip', 'line-list',
    *   'line-strip' or 'point-list'
@@ -29,11 +32,13 @@ export class Material2d {
    */
   constructor({
     color = [1, 1, 1],
+    map = null,
     topology = 'triangle-list',
     cullMode = 'none',
     frontFace = 'ccw',
   } = {}) {
     this.color = color;
+    this.map = map;
     this.topology = topology;
     this.cullMode = cullMode;
     this.frontFace = frontFace;
@@ -44,16 +49,21 @@ export class Material2d {
     return Material2d.SHARED_WGSL + this.fragmentShader;
   }
 
+  /** Like shaderCode, but the vertex stage reads per-instance data (see InstancedShape2d). */
+  get instancedShaderCode() {
+    return Material2d.INSTANCED_WGSL + this.fragmentShader;
+  }
+
   get fragmentShader() {
     throw new Error('Material2d subclasses must implement fragmentShader');
   }
 }
 
 /**
- * Uniform structs and the vertex stage shared by all 2D materials.
- * Field offsets must match what Renderer2d writes into the uniform buffers.
+ * Uniform structs shared by both vertex stages. Field offsets must
+ * match what Renderer2d writes into the uniform buffers.
  */
-Material2d.SHARED_WGSL = /* wgsl */ `
+const STRUCTS_WGSL = /* wgsl */ `
 struct FrameUniforms {
   viewProjection: mat3x3f,
 };
@@ -70,7 +80,16 @@ struct VertexIn {
   @location(0) position: vec2f,
   @location(1) uv: vec2f,
 };
+`;
 
+/**
+ * The vertex stage shared by all 2D materials. `objectColor` is how
+ * fragment shaders read the surface color — each vertex-stage variant
+ * defines it, so the same fragment code works instanced and not.
+ */
+Material2d.SHARED_WGSL =
+  STRUCTS_WGSL +
+  /* wgsl */ `
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
@@ -83,5 +102,49 @@ fn vs(input: VertexIn) -> VertexOut {
   out.position = vec4f(p.xy, 0.0, 1.0);
   out.uv = input.uv;
   return out;
+}
+
+fn objectColor(input: VertexOut) -> vec4f {
+  return uObject.color;
+}
+`;
+
+/**
+ * The instanced vertex stage: each instance carries a mat3 transform
+ * (as three padded columns) and a color in an instance-step vertex
+ * buffer (see InstancedShape2d; the buffer layout lives in
+ * GpuResources2d). Both compose with the shape's own transform and
+ * material color.
+ */
+Material2d.INSTANCED_WGSL =
+  STRUCTS_WGSL +
+  /* wgsl */ `
+struct InstanceIn {
+  @location(2) im0: vec3f,
+  @location(3) im1: vec3f,
+  @location(4) im2: vec3f,
+  @location(5) color: vec4f,
+};
+
+struct VertexOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+  @location(1) color: vec4f,
+};
+
+@vertex
+fn vs(input: VertexIn, instance: InstanceIn) -> VertexOut {
+  var out: VertexOut;
+  let instanceMatrix = mat3x3f(instance.im0, instance.im1, instance.im2);
+  let p = uFrame.viewProjection * uObject.transform * instanceMatrix
+    * vec3f(input.position, 1.0);
+  out.position = vec4f(p.xy, 0.0, 1.0);
+  out.uv = input.uv;
+  out.color = instance.color;
+  return out;
+}
+
+fn objectColor(input: VertexOut) -> vec4f {
+  return input.color * uObject.color;
 }
 `;

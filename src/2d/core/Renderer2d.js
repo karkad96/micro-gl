@@ -102,7 +102,11 @@ export class Renderer2d {
       }
     });
     drawList.sort((a, b) => a.zIndex - b.zIndex);
-    this.drawCount = drawList.length;
+    let drawCount = 0;
+    for (const shape of drawList) {
+      drawCount += shape.isInstanced ? shape.count : 1;
+    }
+    this.drawCount = drawCount;
 
     const encoder = this.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
@@ -126,9 +130,10 @@ export class Renderer2d {
   }
 
   _drawShape(pass, shape) {
+    const instanced = !!shape.isInstanced;
     const geometryGPU = this._resources.geometryFor(shape.geometry);
     const shapeGPU = this._resources.shapeFor(shape);
-    const pipeline = this._resources.pipelineFor(shape.material);
+    const pipeline = this._resources.pipelineFor(shape.material, instanced);
 
     // Per-object uniforms: world transform, color.
     const data = shapeGPU.data;
@@ -143,7 +148,18 @@ export class Renderer2d {
     pass.setPipeline(pipeline);
     pass.setBindGroup(1, shapeGPU.bindGroup);
     pass.setVertexBuffer(0, geometryGPU.vertexBuffer);
+    if (instanced) {
+      if (shape.needsUpdate) {
+        this.device.queue.writeBuffer(
+          shapeGPU.instanceBuffer,
+          0,
+          shape.instanceData,
+        );
+        shape.needsUpdate = false;
+      }
+      pass.setVertexBuffer(1, shapeGPU.instanceBuffer);
+    }
     pass.setIndexBuffer(geometryGPU.indexBuffer, 'uint32');
-    pass.drawIndexed(shape.geometry.indexCount);
+    pass.drawIndexed(shape.geometry.indexCount, instanced ? shape.count : 1);
   }
 }

@@ -1,0 +1,54 @@
+import { Mesh } from './Mesh.js';
+
+/** Floats per instance: a mat4 (16) followed by an rgba color (4). */
+export const INSTANCE_SIZE = 20;
+
+/**
+ * A Mesh drawn `count` times in one draw call. Each instance has its
+ * own transform and color, packed into `instanceData` and uploaded as
+ * an instance-step vertex buffer — thousands of copies cost one
+ * uniform upload and one drawIndexed instead of thousands.
+ *
+ * Instance transforms are local to the mesh: the mesh's own scene-graph
+ * transform applies on top, and instance colors multiply with the
+ * material's color. Write instances with `setMatrixAt`/`setColorAt`,
+ * then set `needsUpdate = true` so the renderer re-uploads the buffer.
+ *
+ * The instance count is fixed at construction. To show fewer instances,
+ * scale the extras to zero; to grow, make a new InstancedMesh.
+ */
+export class InstancedMesh extends Mesh {
+  constructor(geometry, material, count) {
+    super(geometry, material);
+    this.isInstanced = true;
+    this.count = count;
+    this.instanceData = new Float32Array(count * INSTANCE_SIZE);
+    // Every instance starts as an identity matrix with a white color.
+    for (let i = 0; i < count; i++) {
+      const base = i * INSTANCE_SIZE;
+      this.instanceData[base] = 1;
+      this.instanceData[base + 5] = 1;
+      this.instanceData[base + 10] = 1;
+      this.instanceData[base + 15] = 1;
+      this.instanceData.fill(1, base + 16, base + 20);
+    }
+    /** Set true after writing instances so the renderer re-uploads them. */
+    this.needsUpdate = true;
+  }
+
+  /** Copies a Mat4 into instance `index`'s transform. */
+  setMatrixAt(index, matrix) {
+    this.instanceData.set(matrix.elements, index * INSTANCE_SIZE);
+    return this;
+  }
+
+  /** Sets instance `index`'s color from [r, g, b] or [r, g, b, a]. */
+  setColorAt(index, color) {
+    const base = index * INSTANCE_SIZE + 16;
+    this.instanceData[base] = color[0];
+    this.instanceData[base + 1] = color[1];
+    this.instanceData[base + 2] = color[2];
+    this.instanceData[base + 3] = color.length > 3 ? color[3] : 1;
+    return this;
+  }
+}

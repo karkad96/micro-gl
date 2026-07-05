@@ -11,12 +11,14 @@ export { Mat4 } from './math/Mat4.js';
 export { Vec2 } from './math/Vec2.js';
 export { Mat3 } from './math/Mat3.js';
 export { initWebGpu } from './core/initWebGpu.js';
+export { Texture } from './core/Texture.js';
 
 // --- 3D engine --------------------------------------------------------------
 export { Object3d } from './3d/core/Object3d.js';
 export { Raycaster } from './3d/core/Raycaster.js';
 export { Scene } from './3d/core/Scene.js';
 export { Mesh } from './3d/core/Mesh.js';
+export { InstancedMesh } from './3d/core/InstancedMesh.js';
 export { Renderer } from './3d/core/Renderer.js';
 
 export { Camera } from './3d/cameras/Camera.js';
@@ -33,6 +35,7 @@ export { PlaneGeometry } from './3d/geometries/PlaneGeometry.js';
 export { Material } from './3d/materials/Material.js';
 export { BasicMaterial } from './3d/materials/BasicMaterial.js';
 export { LambertMaterial } from './3d/materials/LambertMaterial.js';
+export { TextureMaterial } from './3d/materials/TextureMaterial.js';
 
 export { DirectionalLight } from './3d/lights/DirectionalLight.js';
 export { AmbientLight } from './3d/lights/AmbientLight.js';
@@ -41,6 +44,7 @@ export { AmbientLight } from './3d/lights/AmbientLight.js';
 export { Object2d } from './2d/core/Object2d.js';
 export { Scene2d } from './2d/core/Scene2d.js';
 export { Shape2d } from './2d/core/Shape2d.js';
+export { InstancedShape2d } from './2d/core/InstancedShape2d.js';
 export { Renderer2d } from './2d/core/Renderer2d.js';
 
 export { Camera2d } from './2d/cameras/Camera2d.js';
@@ -53,3 +57,4 @@ export { CircleGeometry } from './2d/geometries/CircleGeometry.js';
 
 export { Material2d } from './2d/materials/Material2d.js';
 export { BasicMaterial2d } from './2d/materials/BasicMaterial2d.js';
+export { SpriteMaterial2d } from './2d/materials/SpriteMaterial2d.js';

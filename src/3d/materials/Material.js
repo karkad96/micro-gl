@@ -1,7 +1,8 @@
 /**
  * Base class for materials. A material is essentially a WGSL shader plus
- * per-object parameters (currently just a color) and the fixed-function
- * pipeline state used to draw with it (topology, culling, winding).
+ * per-object parameters (a color and optionally a texture map) and the
+ * fixed-function pipeline state used to draw with it (topology, culling,
+ * winding).
  *
  * Every shader shares the same uniform interface:
  *   @group(0) — per-frame data (camera + lights), owned by the renderer
@@ -14,6 +15,9 @@ export class Material {
   /**
    * @param {object} [options]
    * @param {number[]} [options.color]    [r, g, b] in 0..1
+   * @param {Texture}  [options.map]      texture the shader can sample at
+   *   the mesh's uvs — only used by materials whose fragment shader
+   *   samples it (see TextureMaterial)
    * @param {GPUPrimitiveTopology} [options.topology]
    *   'triangle-list' (default), 'triangle-strip', 'line-list',
    *   'line-strip' or 'point-list'
@@ -23,11 +27,13 @@ export class Material {
    */
   constructor({
     color = [1, 1, 1],
+    map = null,
     topology = 'triangle-list',
     cullMode = 'back',
     frontFace = 'ccw',
   } = {}) {
     this.color = color;
+    this.map = map;
     this.topology = topology;
     this.cullMode = cullMode;
     this.frontFace = frontFace;
@@ -38,16 +44,21 @@ export class Material {
     return Material.SHARED_WGSL + this.fragmentShader;
   }
 
+  /** Like shaderCode, but the vertex stage reads per-instance data (see InstancedMesh). */
+  get instancedShaderCode() {
+    return Material.INSTANCED_WGSL + this.fragmentShader;
+  }
+
   get fragmentShader() {
     throw new Error('Material subclasses must implement fragmentShader');
   }
 }
 
 /**
- * Uniform structs and the vertex stage shared by all materials.
- * Field offsets must match what Renderer writes into the uniform buffers.
+ * Uniform structs shared by both vertex stages. Field offsets must
+ * match what Renderer writes into the uniform buffers.
  */
-Material.SHARED_WGSL = /* wgsl */ `
+const STRUCTS_WGSL = /* wgsl */ `
 struct FrameUniforms {
   viewProjection: mat4x4f,
   lightDirection: vec3f,
@@ -69,7 +80,16 @@ struct VertexIn {
   @location(1) normal: vec3f,
   @location(2) uv: vec2f,
 };
+`;
 
+/**
+ * The vertex stage shared by all materials. `objectColor` is how
+ * fragment shaders read the surface color — each vertex-stage variant
+ * defines it, so the same fragment code works instanced and not.
+ */
+Material.SHARED_WGSL =
+  STRUCTS_WGSL +
+  /* wgsl */ `
 struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) worldNormal: vec3f,
@@ -84,5 +104,54 @@ fn vs(input: VertexIn) -> VertexOut {
   out.worldNormal = (uObject.normalMatrix * vec4f(input.normal, 0.0)).xyz;
   out.uv = input.uv;
   return out;
+}
+
+fn objectColor(input: VertexOut) -> vec4f {
+  return uObject.color;
+}
+`;
+
+/**
+ * The instanced vertex stage: each instance carries a model matrix and
+ * a color in an instance-step vertex buffer (see InstancedMesh; the
+ * buffer layout lives in GpuResources). Both compose with the mesh's
+ * own transform and material color, so an InstancedMesh still moves
+ * with the scene graph and tints like any mesh.
+ */
+Material.INSTANCED_WGSL =
+  STRUCTS_WGSL +
+  /* wgsl */ `
+struct InstanceIn {
+  @location(3) im0: vec4f,
+  @location(4) im1: vec4f,
+  @location(5) im2: vec4f,
+  @location(6) im3: vec4f,
+  @location(7) color: vec4f,
+};
+
+struct VertexOut {
+  @builtin(position) position: vec4f,
+  @location(0) worldNormal: vec3f,
+  @location(1) uv: vec2f,
+  @location(2) color: vec4f,
+};
+
+@vertex
+fn vs(input: VertexIn, instance: InstanceIn) -> VertexOut {
+  var out: VertexOut;
+  let instanceMatrix = mat4x4f(instance.im0, instance.im1, instance.im2, instance.im3);
+  let worldPosition = uObject.model * instanceMatrix * vec4f(input.position, 1.0);
+  out.position = uFrame.viewProjection * worldPosition;
+  // The instance matrix's upper 3x3 handles rotation + uniform scale
+  // (lighting normalizes); per-instance non-uniform scale skews normals.
+  let rotation = mat3x3f(instance.im0.xyz, instance.im1.xyz, instance.im2.xyz);
+  out.worldNormal = (uObject.normalMatrix * vec4f(rotation * input.normal, 0.0)).xyz;
+  out.uv = input.uv;
+  out.color = instance.color;
+  return out;
+}
+
+fn objectColor(input: VertexOut) -> vec4f {
+  return input.color * uObject.color;
 }
 `;
