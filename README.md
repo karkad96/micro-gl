@@ -52,6 +52,8 @@ src/
                       renderers on the same canvas share it)
     Texture.js        an image + sampler settings; assign to a material's
                       `map` (uploaded lazily, shareable across engines)
+    uploadTexture.js  creates + caches the GPU texture/view/sampler for a
+                      Texture (shared by both engines' GpuResources)
     generateMipmaps.js fills a texture's mip chain with a tiny render
                       pass per level (WebGPU has no built-in way)
 

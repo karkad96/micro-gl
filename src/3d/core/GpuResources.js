@@ -1,8 +1,5 @@
 import { VERTEX_STRIDE } from '../geometries/Geometry.js';
-import {
-  generateMipmaps,
-  mipLevelCount,
-} from '../../core/generateMipmaps.js';
+import { uploadTexture } from '../../core/uploadTexture.js';
 
 // ObjectUniforms: two mat4x4f (128) + vec4f (16) = 144 bytes,
 // matching the WGSL struct in Material.js.
@@ -76,41 +73,7 @@ export class GpuResources {
 
   /** GPU texture, view and sampler for a Texture, uploaded on first use. */
   textureFor(texture) {
-    if (!texture._gpu) {
-      const size = [texture.width, texture.height];
-      const levels = texture.mipmaps
-        ? mipLevelCount(texture.width, texture.height)
-        : 1;
-      const gpuTexture = this.device.createTexture({
-        size,
-        mipLevelCount: levels,
-        format: 'rgba8unorm',
-        // copyExternalImageToTexture requires RENDER_ATTACHMENT usage.
-        usage:
-          GPUTextureUsage.TEXTURE_BINDING |
-          GPUTextureUsage.COPY_DST |
-          GPUTextureUsage.RENDER_ATTACHMENT,
-      });
-      this.device.queue.copyExternalImageToTexture(
-        { source: texture.source, flipY: texture.flipY },
-        { texture: gpuTexture },
-        size,
-      );
-      if (levels > 1) generateMipmaps(this.device, gpuTexture, levels);
-      const sampler = this.device.createSampler({
-        magFilter: texture.magFilter,
-        minFilter: texture.minFilter,
-        mipmapFilter: texture.mipmaps ? 'linear' : 'nearest',
-        addressModeU: texture.addressModeU,
-        addressModeV: texture.addressModeV,
-      });
-      texture._gpu = {
-        texture: gpuTexture,
-        view: gpuTexture.createView(),
-        sampler,
-      };
-    }
-    return texture._gpu;
+    return uploadTexture(this.device, texture);
   }
 
   /** Vertex and index buffers for a geometry. */

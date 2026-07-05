@@ -110,8 +110,9 @@ export function createStressTest(scene, scene2d) {
         mesh.setColorAt(i, hsl(Math.random(), 0.6, 0.55));
       }
       root3d.add(mesh);
-      groups3d.push({ mesh, instances });
-      writeInstances3d(groups3d[groups3d.length - 1]);
+      const group = { mesh, instances };
+      groups3d.push(group);
+      writeInstances3d(group);
     }
 
     // 2D: a confetti field of rects and circles. A third of the
@@ -147,8 +148,9 @@ export function createStressTest(scene, scene2d) {
         shape.setColorAt(i, color);
       }
       root2d.add(shape);
-      groups2d.push({ shape, instances });
-      writeInstances2d(groups2d[groups2d.length - 1]);
+      const group = { shape, instances };
+      groups2d.push(group);
+      writeInstances2d(group);
     }
   }
 
@@ -158,7 +160,6 @@ export function createStressTest(scene, scene2d) {
       matrix4.compose(inst.position, inst.rotation, inst.scale);
       mesh.setMatrixAt(i, matrix4);
     }
-    mesh.needsUpdate = true;
   }
 
   function writeInstances2d({ shape, instances }) {
@@ -167,7 +168,6 @@ export function createStressTest(scene, scene2d) {
       matrix3.compose(inst.position, inst.rotation, inst.scale);
       shape.setMatrixAt(i, matrix3);
     }
-    shape.needsUpdate = true;
   }
 
   // Only the active engine's objects are animated — the inactive scene

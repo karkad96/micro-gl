@@ -11,11 +11,16 @@ export const INSTANCE_SIZE = 20;
  *
  * Instance transforms are local to the mesh: the mesh's own scene-graph
  * transform applies on top, and instance colors multiply with the
- * material's color. Write instances with `setMatrixAt`/`setColorAt`,
- * then set `needsUpdate = true` so the renderer re-uploads the buffer.
+ * material's color. Write instances with `setMatrixAt`/`setColorAt` —
+ * they mark the buffer for re-upload; set `needsUpdate = true` yourself
+ * only if you write `instanceData` directly.
  *
  * The instance count is fixed at construction. To show fewer instances,
  * scale the extras to zero; to grow, make a new InstancedMesh.
+ *
+ * Note: picking (Raycaster / DragControls) sees only the base
+ * geometry's bounding box at the mesh's own transform, not the
+ * individual instances.
  */
 export class InstancedMesh extends Mesh {
   constructor(geometry, material, count) {
@@ -32,13 +37,14 @@ export class InstancedMesh extends Mesh {
       this.instanceData[base + 15] = 1;
       this.instanceData.fill(1, base + 16, base + 20);
     }
-    /** Set true after writing instances so the renderer re-uploads them. */
+    /** True when instanceData has changes the renderer hasn't uploaded yet. */
     this.needsUpdate = true;
   }
 
   /** Copies a Mat4 into instance `index`'s transform. */
   setMatrixAt(index, matrix) {
     this.instanceData.set(matrix.elements, index * INSTANCE_SIZE);
+    this.needsUpdate = true;
     return this;
   }
 
@@ -49,6 +55,7 @@ export class InstancedMesh extends Mesh {
     this.instanceData[base + 1] = color[1];
     this.instanceData[base + 2] = color[2];
     this.instanceData[base + 3] = color.length > 3 ? color[3] : 1;
+    this.needsUpdate = true;
     return this;
   }
 }
