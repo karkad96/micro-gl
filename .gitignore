@@ -29,4 +29,8 @@ Desktop.ini
 *.swp
 
 # Claude Code local settings
-.claude/settings.local.json
+.claude/
+
+# Local demo scenes (not published)
+main.js
+stress.js

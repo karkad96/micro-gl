@@ -5,29 +5,24 @@ JavaScript ES modules — no build step, no dependencies. It also ships a real 2
 engine alongside the 3D one: a parallel set of classes built on 3x3 matrices
 (`Vec2` positions, one rotation angle) instead of a 3D scene viewed top-down.
 
-## Running the demo
+## Running it
 
-WebGPU requires the page to be served over http(s) (opening `index.html` directly
-from disk won't work because of ES modules). From this folder run one of:
+This repo is the engine (`src/`) plus a bare demo page: `index.html`
+loads a `main.js` next to it, which you provide — put one of the
+[minimal usage](#minimal-usage) snippets below in it and you have a
+running scene.
+
+WebGPU requires the page to be served over http(s) (opening `index.html`
+directly from disk won't work because of ES modules). From this folder:
 
 ```
 npx serve .
-# or
-python -m http.server 8000
 ```
 
-then open http://localhost:3000 (or :8000) in a WebGPU-capable browser
-(Chrome/Edge 113+, recent Firefox/Safari versions).
-
-The HUD buttons in the top-left corner pick which engine drives the
-canvas: the **3D scene** or the **2D scene** (two separate scenes — the
-2D one is not a view of the 3D objects). Alt + drag to orbit (or spin
-the view in 2D), right-drag to pan (a plain right-click still opens the
-context menu), scroll to zoom (toward the cursor). Click a shape to
-select it, then drag to move it around. In the 3D scene, press **C** to
-switch between perspective and orthographic cameras and **T** to toggle
-a top-down view where Alt + drag spins the view around the vertical
-axis (the scene always stays top-down).
+then open http://localhost:3000 in a WebGPU-capable browser
+(Chrome/Edge 113+, recent Firefox/Safari versions). Avoid Python's
+`http.server` — on some systems it serves `.js` with a MIME type that
+breaks ES module loading.
 
 ## Project structure
 
@@ -36,8 +31,9 @@ something lives in one, you know where it lives in the other. Only `math/`
 and `core/` are shared.
 
 ```
-index.html            demo page (canvas + HUD)
-main.js               demo scenes (3D and 2D; HUD buttons swap engines)
+index.html            demo page shell (canvas + HUD elements); loads the
+                      main.js you write your scene in
+style.css             demo page styles
 src/
   index.js            single entry point that re-exports everything
 
@@ -213,8 +209,7 @@ requestAnimationFrame(frame);
   the Texture's settings.
 - **Instancing**: an `InstancedMesh` packs per-instance transform + color
   into a second, instance-stepped vertex buffer and draws all instances
-  with one `drawIndexed`. The stress test (the HUD's Stress button) uses
-  this — 8,000 objects are two draw calls.
+  with one `drawIndexed` — thousands of objects for a couple of draw calls.
 - **render()** updates world matrices, writes the uniforms, records a single
   render pass with a `depth24plus` depth attachment, and submits it.
 
