@@ -2,7 +2,7 @@
  * Base class for materials. A material is essentially a WGSL shader plus
  * per-object parameters (a color and optionally a texture map) and the
  * fixed-function pipeline state used to draw with it (topology, culling,
- * winding).
+ * winding, transparency).
  *
  * Every shader shares the same uniform interface:
  *   @group(0) — per-frame data (camera + lights), owned by the renderer
@@ -24,6 +24,10 @@ export class Material {
    * @param {GPUCullMode}  [options.cullMode]  'back' (default), 'front' or
    *   'none'; only applies to triangle topologies
    * @param {GPUFrontFace} [options.frontFace] 'ccw' (default) or 'cw'
+   * @param {boolean} [options.transparent] alpha-blend this material: the
+   *   renderer draws transparent meshes after all opaque ones, sorted
+   *   back-to-front, and they stop writing the depth buffer. Combine
+   *   with a color alpha below 1 (or a texture with alpha)
    */
   constructor({
     color = [1, 1, 1],
@@ -31,12 +35,14 @@ export class Material {
     topology = 'triangle-list',
     cullMode = 'back',
     frontFace = 'ccw',
+    transparent = false,
   } = {}) {
     this.color = color;
     this.map = map;
     this.topology = topology;
     this.cullMode = cullMode;
     this.frontFace = frontFace;
+    this.transparent = transparent;
   }
 
   /** Full WGSL source with `vs` and `fs` entry points. Subclasses provide the fragment stage. */

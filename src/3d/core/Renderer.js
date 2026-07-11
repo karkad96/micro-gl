@@ -42,6 +42,8 @@ export class Renderer {
     this._resources = null;
     this._depthTexture = null;
     this._depthView = null;
+    this._opaqueList = [];
+    this._transparentList = [];
     this._frameData = new Float32Array(FRAME_UNIFORM_SIZE / 4);
     this._normalMatrix = new Mat4();
   }
@@ -104,6 +106,34 @@ export class Renderer {
 
     this._writeFrameUniforms(scene, camera);
 
+    // Opaque meshes draw first, in scene order. Transparent meshes draw
+    // after, sorted back-to-front by view-space depth — the 3D
+    // counterpart of Renderer2d's zIndex sort. Their pipelines blend
+    // and don't write depth (see Pipelines), so what's behind them
+    // stays visible.
+    const opaque = this._opaqueList;
+    const transparent = this._transparentList;
+    opaque.length = 0;
+    transparent.length = 0;
+    let drawCount = 0;
+    scene.traverse((object) => {
+      if (object instanceof Mesh && object.visible) {
+        (object.material.transparent ? transparent : opaque).push(object);
+        drawCount += object.isInstanced ? object.count : 1;
+      }
+    });
+    this.drawCount = drawCount;
+    if (transparent.length > 0) {
+      const v = camera.viewMatrix.elements;
+      for (const mesh of transparent) {
+        const w = mesh.worldMatrix.elements;
+        // View-space z of the mesh origin; the camera looks down -z,
+        // so the most negative depth is the farthest away.
+        mesh._viewDepth = v[2] * w[12] + v[6] * w[13] + v[10] * w[14] + v[14];
+      }
+      transparent.sort((a, b) => a._viewDepth - b._viewDepth);
+    }
+
     const encoder = this.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
       colorAttachments: [
@@ -123,14 +153,8 @@ export class Renderer {
     });
 
     pass.setBindGroup(0, this._frameBindGroup);
-    let drawCount = 0;
-    scene.traverse((object) => {
-      if (object instanceof Mesh && object.visible) {
-        this._drawMesh(pass, object);
-        drawCount += object.isInstanced ? object.count : 1;
-      }
-    });
-    this.drawCount = drawCount;
+    for (const mesh of opaque) this._drawMesh(pass, mesh);
+    for (const mesh of transparent) this._drawMesh(pass, mesh);
 
     pass.end();
     this.device.queue.submit([encoder.finish()]);

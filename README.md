@@ -207,7 +207,10 @@ One `renderer.render(scene, camera)` call, start to finish:
    buffer.
 4. A single render pass begins, clearing the canvas and the depth
    buffer.
-5. The scene is traversed and every visible `Mesh` is drawn:
+5. The scene is traversed and visible meshes are collected: opaque ones
+   draw first in scene order, then transparent ones
+   (`material.transparent`) draw back-to-front by view-space depth —
+   the 3D counterpart of the 2D `zIndex` sort. For each mesh:
    - `GpuResources` hands back the geometry's vertex/index buffers, the
      mesh's uniform buffer + bind group, and the material's pipeline
      (from `Pipelines`) — each created on first use and cached after;
@@ -234,9 +237,10 @@ alpha blending on.
     first draw). Materials with a `map` use a second layout that adds the
     texture view and sampler to the same group.
 - **Pipelines** are compiled once per material class + pipeline state
-  (primitive topology, culling, textured or not, instanced or not) and
-  cached, so any number of meshes sharing a material class reuse the same
-  `GPURenderPipeline`.
+  (primitive topology, culling, textured / instanced / transparent or
+  not) and cached, so any number of meshes sharing a material class reuse
+  the same `GPURenderPipeline`. Transparent variants alpha-blend and
+  don't write the depth buffer.
 - **Geometries** upload one interleaved vertex buffer (position, normal, uv —
   32-byte stride) and one 32-bit index buffer, lazily on first draw.
 - **Textures** upload once with a full mip chain (generated level by level
@@ -264,12 +268,12 @@ mock: the value of a renderer is what it puts on screen).
 
 - One directional light + ambient; no shadows.
 - Cameras orient via `lookAt` target, not via their `rotation` Euler angles.
-- Opaque rendering only in 3D (no blending/transparency sorting); the 2D
-  engine does blend, using painter's-algorithm zIndex sorting instead of a
-  depth buffer.
+- Transparent meshes sort back-to-front by their origin's depth, not per
+  triangle, so intersecting or nested transparent meshes can blend in the
+  wrong order.
 - Per-instance non-uniform scale skews instanced lighting normals (the
   shader uses the instance matrix directly instead of its inverse
   transpose).
 
-Natural next steps if you want to grow it: point lights, transparency in
-3D, a wireframe/grid helper, and shadow mapping.
+Natural next steps if you want to grow it: point lights, MSAA, a
+wireframe/grid helper, and shadow mapping.

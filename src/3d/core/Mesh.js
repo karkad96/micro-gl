@@ -9,5 +9,7 @@ export class Mesh extends Object3d {
     super();
     this.geometry = geometry;
     this.material = material;
+    /** View-space depth, written by the renderer's transparent sort. */
+    this._viewDepth = 0;
   }
 }
