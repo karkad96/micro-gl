@@ -1,6 +1,7 @@
 import { Shape2d } from './Shape2d.js';
 import { GpuResources2d } from './GpuResources2d.js';
 import { initWebGpu } from '../../core/initWebGpu.js';
+import { srgbToLinear } from '../../math/color.js';
 
 // FrameUniforms: one mat3x3f (48 bytes, columns padded to 16 bytes),
 // matching the WGSL struct in Material2d.js. Mat3.elements already uses
@@ -96,8 +97,8 @@ export class Renderer2d {
     // back-to-front. sort() is stable, so equal zIndex keeps scene order.
     const drawList = this._drawList;
     drawList.length = 0;
-    scene.traverse((object) => {
-      if (object instanceof Shape2d && object.visible) {
+    scene.traverseVisible((object) => {
+      if (object instanceof Shape2d) {
         drawList.push(object);
       }
     });
@@ -139,9 +140,11 @@ export class Renderer2d {
     const data = shapeGPU.data;
     data.set(shape.worldMatrix.elements, TRANSFORM);
     const color = shape.material.color;
-    data[OBJECT_COLOR] = color[0];
-    data[OBJECT_COLOR + 1] = color[1];
-    data[OBJECT_COLOR + 2] = color[2];
+    // Colors are authored in sRGB; the shader shades in linear space
+    // and encodes back at the end.
+    data[OBJECT_COLOR] = srgbToLinear(color[0]);
+    data[OBJECT_COLOR + 1] = srgbToLinear(color[1]);
+    data[OBJECT_COLOR + 2] = srgbToLinear(color[2]);
     data[OBJECT_COLOR + 3] = color.length > 3 ? color[3] : 1;
     this.device.queue.writeBuffer(shapeGPU.uniformBuffer, 0, data);
 

@@ -43,8 +43,8 @@ export class Raycaster {
   intersectObjects(objects) {
     const hits = [];
     for (const root of objects) {
-      root.traverse((object) => {
-        if (object instanceof Mesh && object.visible && object.geometry) {
+      root.traverseVisible((object) => {
+        if (object instanceof Mesh && object.geometry) {
           const hit = this._intersectMesh(object);
           if (hit) hits.push(hit);
         }

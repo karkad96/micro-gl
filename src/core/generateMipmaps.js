@@ -29,7 +29,8 @@ fn fs(input: VertexOut) -> @location(0) vec4f {
 }
 `;
 
-const generators = new WeakMap(); // device -> { pipeline, sampler }
+// device -> { module, sampler, pipelines: Map(texture format -> pipeline) }
+const generators = new WeakMap();
 
 /** Mip levels needed to take a width x height image down to 1x1. */
 export function mipLevelCount(width, height) {
@@ -37,34 +38,41 @@ export function mipLevelCount(width, height) {
 }
 
 /**
- * Fills mip levels 1..levels-1 of `texture` (an rgba8unorm GPUTexture
- * whose level 0 is already written) by downsampling level by level.
- * The texture must have TEXTURE_BINDING and RENDER_ATTACHMENT usage —
- * the ones GpuResources creates already do.
+ * Fills mip levels 1..levels-1 of `texture` (a GPUTexture of the given
+ * format whose level 0 is already written) by downsampling level by
+ * level. The texture must have TEXTURE_BINDING and RENDER_ATTACHMENT
+ * usage — the ones uploadTexture creates already do. For an '-srgb'
+ * format the samples decode to linear and the render target re-encodes,
+ * so the filtering itself happens in linear space.
  */
-export function generateMipmaps(device, texture, levels) {
+export function generateMipmaps(device, texture, levels, format) {
   let generator = generators.get(device);
   if (!generator) {
-    const module = device.createShaderModule({ code: MIPMAP_WGSL });
     generator = {
-      pipeline: device.createRenderPipeline({
-        layout: 'auto',
-        vertex: { module, entryPoint: 'vs' },
-        fragment: {
-          module,
-          entryPoint: 'fs',
-          targets: [{ format: 'rgba8unorm' }],
-        },
-      }),
+      module: device.createShaderModule({ code: MIPMAP_WGSL }),
       sampler: device.createSampler({ minFilter: 'linear' }),
+      pipelines: new Map(),
     };
     generators.set(device, generator);
+  }
+  let pipeline = generator.pipelines.get(format);
+  if (!pipeline) {
+    pipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module: generator.module, entryPoint: 'vs' },
+      fragment: {
+        module: generator.module,
+        entryPoint: 'fs',
+        targets: [{ format }],
+      },
+    });
+    generator.pipelines.set(format, pipeline);
   }
 
   const encoder = device.createCommandEncoder();
   for (let level = 1; level < levels; level++) {
     const bindGroup = device.createBindGroup({
-      layout: generator.pipeline.getBindGroupLayout(0),
+      layout: pipeline.getBindGroupLayout(0),
       entries: [
         {
           binding: 0,
@@ -85,7 +93,7 @@ export function generateMipmaps(device, texture, levels) {
         },
       ],
     });
-    pass.setPipeline(generator.pipeline);
+    pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
     pass.draw(3);
     pass.end();

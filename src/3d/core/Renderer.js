@@ -1,5 +1,6 @@
 import { Mesh } from './Mesh.js';
 import { Mat4 } from '../../math/Mat4.js';
+import { srgbToLinear } from '../../math/color.js';
 import { GpuResources } from './GpuResources.js';
 import { initWebGpu } from '../../core/initWebGpu.js';
 import { DirectionalLight } from '../lights/DirectionalLight.js';
@@ -116,8 +117,8 @@ export class Renderer {
     opaque.length = 0;
     transparent.length = 0;
     let drawCount = 0;
-    scene.traverse((object) => {
-      if (object instanceof Mesh && object.visible) {
+    scene.traverseVisible((object) => {
+      if (object instanceof Mesh) {
         (object.material.transparent ? transparent : opaque).push(object);
         drawCount += object.isInstanced ? object.count : 1;
       }
@@ -165,13 +166,14 @@ export class Renderer {
     let ambientR = 0,
       ambientG = 0,
       ambientB = 0;
-    scene.traverse((object) => {
+    scene.traverseVisible((object) => {
       if (!directional && object instanceof DirectionalLight)
         directional = object;
       if (object instanceof AmbientLight) {
-        ambientR += object.color[0] * object.intensity;
-        ambientG += object.color[1] * object.intensity;
-        ambientB += object.color[2] * object.intensity;
+        // Colors are authored in sRGB; lighting happens in linear.
+        ambientR += srgbToLinear(object.color[0]) * object.intensity;
+        ambientG += srgbToLinear(object.color[1]) * object.intensity;
+        ambientB += srgbToLinear(object.color[2]) * object.intensity;
       }
     });
 
@@ -184,9 +186,10 @@ export class Renderer {
       data[LIGHT_DIRECTION] = dir.x / len;
       data[LIGHT_DIRECTION + 1] = dir.y / len;
       data[LIGHT_DIRECTION + 2] = dir.z / len;
-      data[LIGHT_COLOR] = directional.color[0] * directional.intensity;
-      data[LIGHT_COLOR + 1] = directional.color[1] * directional.intensity;
-      data[LIGHT_COLOR + 2] = directional.color[2] * directional.intensity;
+      const { color, intensity } = directional;
+      data[LIGHT_COLOR] = srgbToLinear(color[0]) * intensity;
+      data[LIGHT_COLOR + 1] = srgbToLinear(color[1]) * intensity;
+      data[LIGHT_COLOR + 2] = srgbToLinear(color[2]) * intensity;
     } else {
       data[LIGHT_DIRECTION] = 0;
       data[LIGHT_DIRECTION + 1] = -1;
@@ -214,9 +217,9 @@ export class Renderer {
     this._normalMatrix.copy(mesh.worldMatrix).invert().transpose();
     data.set(this._normalMatrix.elements, NORMAL_MATRIX);
     const color = mesh.material.color;
-    data[OBJECT_COLOR] = color[0];
-    data[OBJECT_COLOR + 1] = color[1];
-    data[OBJECT_COLOR + 2] = color[2];
+    data[OBJECT_COLOR] = srgbToLinear(color[0]);
+    data[OBJECT_COLOR + 1] = srgbToLinear(color[1]);
+    data[OBJECT_COLOR + 2] = srgbToLinear(color[2]);
     data[OBJECT_COLOR + 3] = color.length > 3 ? color[3] : 1;
     this.device.queue.writeBuffer(meshGPU.uniformBuffer, 0, data);
 

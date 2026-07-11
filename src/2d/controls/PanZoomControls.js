@@ -4,6 +4,7 @@ import { PointerControls } from '../../core/PointerControls.js';
  * Mouse / touch controls for a Camera2d: right-drag to pan, scroll to
  * zoom (toward the cursor), Alt + left-drag to spin the view. A
  * right-click without dragging still opens the browser context menu.
+ * On touch screens: drag with one or two fingers to pan, pinch to zoom.
  *
  * The same gestures as OrbitControls (both inherit the plumbing from
  * PointerControls), minus the orbit — and because a 2D camera has no

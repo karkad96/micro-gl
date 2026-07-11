@@ -43,6 +43,8 @@ src/
     Vec2.js           2-component vector
     Mat3.js           3x3 affine transform, stored in the padded column
                       layout WGSL uses for mat3x3f uniforms
+    color.js          sRGB <-> linear conversion helpers (colors are
+                      authored in sRGB, shaded in linear)
   core/               shared WebGPU plumbing
     initWebGpu.js     adapter/device/canvas setup (one device per canvas —
                       renderers on the same canvas share it)
@@ -52,8 +54,10 @@ src/
                       Texture (shared by both engines' GpuResources)
     generateMipmaps.js fills a texture's mip chain with a tiny render
                       pass per level (WebGPU has no built-in way)
-    PointerControls.js the pointer/wheel gesture plumbing shared by the
-                      camera controls (subclasses provide the camera math)
+    PointerControls.js the pointer/wheel/touch gesture plumbing shared by
+                      the camera controls (subclasses provide the camera
+                      math); touch: one-finger drag, two-finger pan,
+                      pinch zoom
 
   3d/                 the 3D engine
     core/
@@ -72,7 +76,9 @@ src/
       PerspectiveCamera.js
       OrthographicCamera.js
     controls/
-      OrbitControls.js  alt-drag-to-orbit / right-drag-to-pan / scroll-to-zoom
+      OrbitControls.js  alt-drag-to-orbit / right-drag-to-pan /
+                      scroll-to-zoom; touch: one-finger orbit,
+                      two-finger pan, pinch zoom
       DragControls.js   click-to-select and drag meshes around
     geometries/
       Geometry.js     base class (interleaved position/normal/uv vertices)
@@ -102,7 +108,8 @@ src/
     cameras/
       Camera2d.js     pan/zoom/rotation as a single Mat3, no perspective
     controls/
-      PanZoomControls.js  right-drag-to-pan / scroll-to-zoom / alt-drag-to-spin
+      PanZoomControls.js  right-drag-to-pan / scroll-to-zoom /
+                      alt-drag-to-spin; touch: drag to pan, pinch to zoom
       DragControls2d.js   click-to-select and drag shapes around
     geometries/
       Geometry2d.js   base class (interleaved position/uv vertices) +
@@ -207,7 +214,9 @@ One `renderer.render(scene, camera)` call, start to finish:
    buffer.
 4. A single render pass begins, clearing the canvas and the depth
    buffer.
-5. The scene is traversed and visible meshes are collected: opaque ones
+5. The scene is traversed and visible meshes are collected (an object
+   with `visible = false` is skipped along with its whole subtree —
+   hiding a group hides everything in it): opaque ones
    draw first in scene order, then transparent ones
    (`material.transparent`) draw back-to-front by view-space depth —
    the 3D counterpart of the 2D `zIndex` sort. For each mesh:
@@ -245,7 +254,16 @@ alpha blending on.
   32-byte stride) and one 32-bit index buffer, lazily on first draw.
 - **Textures** upload once with a full mip chain (generated level by level
   with a tiny render pass — `generateMipmaps.js`) and get a sampler from
-  the Texture's settings.
+  the Texture's settings. Image textures upload as `rgba8unorm-srgb`, so
+  sampling and mip filtering happen in linear space.
+- **Color space**: the colors you author (material, light and instance
+  colors) are sRGB display values. The renderer decodes them to linear
+  (`srgbToLinear`), all shading happens in linear space, and every
+  fragment shader encodes the result back to sRGB at the end — unlit
+  colors round-trip exactly, lit and textured surfaces shade correctly.
+- **Geometries** are uploaded once and cached; edit `vertices`/`indices`
+  in place and set `geometry.needsUpdate = true` to re-upload (the
+  arrays must keep their length).
 - **Instancing**: an `InstancedMesh` packs per-instance transform + color
   into a second, instance-stepped vertex buffer and draws all instances
   with one `drawIndexed` — thousands of objects for a couple of draw calls.

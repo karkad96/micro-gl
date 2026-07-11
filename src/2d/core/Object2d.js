@@ -21,6 +21,7 @@ export class Object2d {
 
     this.parent = null;
     this.children = [];
+    /** Invisible objects — and everything under them — are skipped by rendering and picking. */
     this.visible = true;
 
     this.localMatrix = new Mat3();
@@ -71,6 +72,19 @@ export class Object2d {
     callback(this);
     for (const child of this.children) {
       child.traverse(callback);
+    }
+  }
+
+  /**
+   * Like traverse, but skips objects with `visible = false` and their
+   * whole subtree — hiding a group hides everything inside it. The
+   * renderer and picking walk the scene with this.
+   */
+  traverseVisible(callback) {
+    if (!this.visible) return;
+    callback(this);
+    for (const child of this.children) {
+      child.traverseVisible(callback);
     }
   }
 
