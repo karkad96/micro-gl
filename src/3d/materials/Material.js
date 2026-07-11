@@ -114,7 +114,7 @@ fn objectColor(input: VertexOut) -> vec4f {
 /**
  * The instanced vertex stage: each instance carries a model matrix and
  * a color in an instance-step vertex buffer (see InstancedMesh; the
- * buffer layout lives in GpuResources). Both compose with the mesh's
+ * buffer layout lives in Pipelines). Both compose with the mesh's
  * own transform and material color, so an InstancedMesh still moves
  * with the scene graph and tints like any mesh.
  */

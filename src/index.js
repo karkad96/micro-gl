@@ -12,6 +12,7 @@ export { Vec2 } from './math/Vec2.js';
 export { Mat3 } from './math/Mat3.js';
 export { initWebGpu } from './core/initWebGpu.js';
 export { Texture } from './core/Texture.js';
+export { PointerControls } from './core/PointerControls.js';
 
 // --- 3D engine --------------------------------------------------------------
 export { Object3d } from './3d/core/Object3d.js';

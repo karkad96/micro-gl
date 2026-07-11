@@ -60,6 +60,20 @@ export class Geometry2d {
   get indexCount() {
     return this.indices.length;
   }
+
+  /**
+   * Destroys the GPU vertex/index buffers (if any), releasing the
+   * memory right away instead of waiting for GC. Call it when nothing
+   * draws this geometry anymore; drawing it again re-uploads.
+   */
+  dispose() {
+    if (this._gpu) {
+      this._gpu.vertexBuffer.destroy();
+      this._gpu.indexBuffer.destroy();
+      this._gpu = null;
+    }
+    return this;
+  }
 }
 
 /** Number of floats per vertex (2 position + 2 uv). */

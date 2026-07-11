@@ -57,6 +57,20 @@ export class Texture {
     return this.source.height;
   }
 
+  /**
+   * Destroys the uploaded GPU texture (if any), releasing its memory
+   * right away instead of waiting for GC. The next draw that samples
+   * this Texture uploads it again, and meshes/shapes using it rebuild
+   * their bind groups automatically.
+   */
+  dispose() {
+    if (this._gpu) {
+      this._gpu.texture.destroy();
+      this._gpu = null;
+    }
+    return this;
+  }
+
   /** Fetches an image file and wraps it in a Texture. */
   static async load(url, options) {
     const response = await fetch(url);

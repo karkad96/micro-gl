@@ -3,71 +3,54 @@ import { Geometry, VERTEX_SIZE } from './Geometry.js';
 /**
  * An axis-aligned box centered on the origin, with flat-shaded faces
  * (24 vertices so each face gets its own normals and uvs).
+ *
+ * Each face is described by the corner where its uvs are (0, 0) plus
+ * the two edges the u and v axes run along; the outward normal falls
+ * out as edgeU x edgeV, which is also what makes the triangles wind
+ * counter-clockwise seen from outside.
  */
 export class BoxGeometry extends Geometry {
   constructor(width = 1, height = 1, depth = 1) {
+    const x = width / 2;
+    const y = height / 2;
+    const z = depth / 2;
+
+    // prettier-ignore
+    const faces = [
+      //  uv (0,0) corner       edge along u             edge along v
+      { corner: [ x, -y,  z], edgeU: [0, 0, -depth],  edgeV: [0, height, 0] }, // +X
+      { corner: [-x, -y, -z], edgeU: [0, 0,  depth],  edgeV: [0, height, 0] }, // -X
+      { corner: [-x,  y,  z], edgeU: [width, 0,  0],  edgeV: [0, 0, -depth] }, // +Y
+      { corner: [-x, -y, -z], edgeU: [width, 0,  0],  edgeV: [0, 0,  depth] }, // -Y
+      { corner: [-x, -y,  z], edgeU: [width, 0,  0],  edgeV: [0, height, 0] }, // +Z
+      { corner: [ x, -y, -z], edgeU: [-width, 0, 0],  edgeV: [0, height, 0] }, // -Z
+    ];
+
     const vertices = [];
     const indices = [];
+    for (const { corner, edgeU, edgeV } of faces) {
+      let nx = edgeU[1] * edgeV[2] - edgeU[2] * edgeV[1];
+      let ny = edgeU[2] * edgeV[0] - edgeU[0] * edgeV[2];
+      let nz = edgeU[0] * edgeV[1] - edgeU[1] * edgeV[0];
+      const len = Math.hypot(nx, ny, nz);
+      nx /= len;
+      ny /= len;
+      nz /= len;
 
-    // u, v, w are the axis names each face maps its plane onto;
-    // the sign of planeDepth picks which side of the box the face sits on.
-    buildFace('z', 'y', 'x', -1, -1, depth, height, width, vertices, indices); // +X
-    buildFace('z', 'y', 'x', 1, -1, depth, height, -width, vertices, indices); // -X
-    buildFace('x', 'z', 'y', 1, 1, width, depth, height, vertices, indices); // +Y
-    buildFace('x', 'z', 'y', 1, -1, width, depth, -height, vertices, indices); // -Y
-    buildFace('x', 'y', 'z', 1, -1, width, height, depth, vertices, indices); // +Z
-    buildFace('x', 'y', 'z', -1, -1, width, height, -depth, vertices, indices); // -Z
+      const base = vertices.length / VERTEX_SIZE;
+      // The four corners in uv order, then two ccw triangles.
+      for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+        vertices.push(
+          corner[0] + edgeU[0] * u + edgeV[0] * v,
+          corner[1] + edgeU[1] * u + edgeV[1] * v,
+          corner[2] + edgeU[2] * u + edgeV[2] * v,
+          nx, ny, nz,
+          u, v,
+        );
+      }
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
 
     super(vertices, indices);
   }
-}
-
-function buildFace(
-  u,
-  v,
-  w,
-  udir,
-  vdir,
-  planeWidth,
-  planeHeight,
-  planeDepth,
-  vertices,
-  indices,
-) {
-  const widthHalf = planeWidth / 2;
-  const heightHalf = planeHeight / 2;
-  const depthHalf = planeDepth / 2;
-  const firstVertex = vertices.length / VERTEX_SIZE;
-
-  for (let iy = 0; iy < 2; iy++) {
-    const y = iy * planeHeight - heightHalf;
-    for (let ix = 0; ix < 2; ix++) {
-      const x = ix * planeWidth - widthHalf;
-
-      const position = { x: 0, y: 0, z: 0 };
-      position[u] = x * udir;
-      position[v] = y * vdir;
-      position[w] = depthHalf;
-
-      const normal = { x: 0, y: 0, z: 0 };
-      normal[w] = planeDepth > 0 ? 1 : -1;
-
-      vertices.push(
-        position.x,
-        position.y,
-        position.z,
-        normal.x,
-        normal.y,
-        normal.z,
-        ix,
-        1 - iy,
-      );
-    }
-  }
-
-  const a = firstVertex;
-  const b = firstVertex + 2;
-  const c = firstVertex + 3;
-  const d = firstVertex + 1;
-  indices.push(a, b, d, b, c, d);
 }

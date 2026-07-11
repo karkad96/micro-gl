@@ -24,7 +24,11 @@ export class Object3d {
   }
 
   add(child) {
-    if (child === this) return this;
+    // Adding an object to itself or to one of its own descendants would
+    // create a cycle and hang traverse/updateWorldMatrix — refuse it.
+    for (let node = this; node; node = node.parent) {
+      if (node === child) return this;
+    }
     if (child.parent) child.parent.remove(child);
     child.parent = this;
     this.children.push(child);

@@ -1,0 +1,142 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Vec2 } from '../src/math/Vec2.js';
+import { Vec3 } from '../src/math/Vec3.js';
+import { Mat3 } from '../src/math/Mat3.js';
+import { Mat4 } from '../src/math/Mat4.js';
+
+const EPS = 1e-5;
+
+function assertClose(actual, expected, message = '') {
+  assert.ok(
+    Math.abs(actual - expected) < EPS,
+    `${message} expected ${expected}, got ${actual}`,
+  );
+}
+
+function assertElementsClose(matrix, expected) {
+  for (let i = 0; i < expected.length; i++) {
+    assertClose(matrix.elements[i], expected[i], `element ${i}:`);
+  }
+}
+
+// prettier-ignore
+const IDENTITY4 = [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1];
+
+test('Mat4.multiply by identity leaves the matrix unchanged', () => {
+  const m = new Mat4().compose(
+    new Vec3(1, 2, 3),
+    new Vec3(0.4, 0.5, 0.6),
+    new Vec3(2, 3, 4),
+  );
+  const before = [...m.elements];
+  m.multiply(new Mat4());
+  assertElementsClose(m, before);
+});
+
+test('Mat4.multiplyMatrices is safe when the target aliases an operand', () => {
+  const t = new Mat4().makeTranslation(1, 2, 3);
+  t.multiplyMatrices(t, t);
+  assertElementsClose(t, new Mat4().makeTranslation(2, 4, 6).elements);
+});
+
+test('Mat4.invert undoes compose', () => {
+  const m = new Mat4().compose(
+    new Vec3(1, -2, 3),
+    new Vec3(0.3, -0.8, 1.2),
+    new Vec3(2, 0.5, 1.5),
+  );
+  const product = new Mat4().copy(m).invert().premultiply(m); // m * m^-1
+  assertElementsClose(product, IDENTITY4);
+});
+
+test('Mat4.transpose applied twice is the original', () => {
+  const m = new Mat4().compose(
+    new Vec3(1, 2, 3),
+    new Vec3(0.5, 0.6, 0.7),
+    new Vec3(1, 2, 3),
+  );
+  const before = [...m.elements];
+  m.transpose().transpose();
+  assertElementsClose(m, before);
+});
+
+test('Mat4.perspective maps the near and far planes to depth 0 and 1', () => {
+  const proj = new Mat4().perspective(Math.PI / 3, 1.5, 0.1, 100);
+  assertClose(new Vec3(0, 0, -0.1).applyMat4(proj).z, 0, 'near plane:');
+  assertClose(new Vec3(0, 0, -100).applyMat4(proj).z, 1, 'far plane:');
+});
+
+test('Mat4.orthographic maps the view box onto clip space', () => {
+  const proj = new Mat4().orthographic(-2, 2, -1, 1, 0.1, 10);
+  const nearCorner = new Vec3(-2, -1, -0.1).applyMat4(proj);
+  assertClose(nearCorner.x, -1);
+  assertClose(nearCorner.y, -1);
+  assertClose(nearCorner.z, 0);
+  const farCorner = new Vec3(2, 1, -10).applyMat4(proj);
+  assertClose(farCorner.x, 1);
+  assertClose(farCorner.y, 1);
+  assertClose(farCorner.z, 1);
+});
+
+test('Mat4.targetTo with the camera on +Z is the identity orientation', () => {
+  const m = new Mat4().targetTo(
+    new Vec3(0, 0, 5),
+    new Vec3(0, 0, 0),
+    new Vec3(0, 1, 0),
+  );
+  // prettier-ignore
+  assertElementsClose(m, [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 5, 1]);
+});
+
+test('Mat4.compose applies translation, rotation and scale in TRS order', () => {
+  const m = new Mat4().compose(
+    new Vec3(10, 0, 0),
+    new Vec3(0, 0, Math.PI / 2),
+    new Vec3(2, 2, 2),
+  );
+  // (1,0,0) scaled to (2,0,0), rotated about z to (0,2,0), moved to (10,2,0).
+  const p = new Vec3(1, 0, 0).applyMat4(m);
+  assertClose(p.x, 10);
+  assertClose(p.y, 2);
+  assertClose(p.z, 0);
+});
+
+test('Mat3.compose applies translation, rotation and scale in TRS order', () => {
+  const m = new Mat3().compose(new Vec2(5, -1), Math.PI / 2, new Vec2(3, 3));
+  // (1,0) scaled to (3,0), rotated to (0,3), moved to (5,2).
+  const p = new Vec2(1, 0).applyMat3(m);
+  assertClose(p.x, 5);
+  assertClose(p.y, 2);
+});
+
+test('Mat3.invert undoes an affine transform', () => {
+  const m = new Mat3().compose(new Vec2(2, 3), 0.7, new Vec2(1.5, 0.5));
+  const p = new Vec2(4, -2)
+    .applyMat3(m)
+    .applyMat3(new Mat3().copy(m).invert());
+  assertClose(p.x, 4);
+  assertClose(p.y, -2);
+});
+
+test('Mat3.multiplyMatrices is safe when the target aliases an operand', () => {
+  const t = new Mat3().makeTranslation(1, 2);
+  t.multiplyMatrices(t, t);
+  const p = new Vec2(0, 0).applyMat3(t);
+  assertClose(p.x, 2);
+  assertClose(p.y, 4);
+});
+
+test('Vec3 cross product and normalize', () => {
+  const v = new Vec3().crossVectors(new Vec3(2, 0, 0), new Vec3(0, 3, 0));
+  assertClose(v.x, 0);
+  assertClose(v.y, 0);
+  assertClose(v.z, 6);
+  assertClose(v.normalize().length(), 1);
+});
+
+test('Vec2.applyMat3 rotates a point', () => {
+  const p = new Vec2(1, 0).applyMat3(new Mat3().makeRotation(Math.PI / 2));
+  assertClose(p.x, 0);
+  assertClose(p.y, 1);
+});

@@ -113,7 +113,7 @@ fn objectColor(input: VertexOut) -> vec4f {
  * The instanced vertex stage: each instance carries a mat3 transform
  * (as three padded columns) and a color in an instance-step vertex
  * buffer (see InstancedShape2d; the buffer layout lives in
- * GpuResources2d). Both compose with the shape's own transform and
+ * Pipelines2d). Both compose with the shape's own transform and
  * material color.
  */
 Material2d.INSTANCED_WGSL =

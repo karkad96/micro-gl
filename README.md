@@ -52,6 +52,8 @@ src/
                       Texture (shared by both engines' GpuResources)
     generateMipmaps.js fills a texture's mip chain with a tiny render
                       pass per level (WebGPU has no built-in way)
+    PointerControls.js the pointer/wheel gesture plumbing shared by the
+                      camera controls (subclasses provide the camera math)
 
   3d/                 the 3D engine
     core/
@@ -62,8 +64,9 @@ src/
                       with its own transform + color
       Raycaster.js    pointer picking via ray vs. bounding-box tests
       Renderer.js     swap chain, depth buffer, render pass
-      GpuResources.js lazy caches: pipelines, vertex/index/uniform buffers,
-                      bind groups
+      Pipelines.js    bind group layouts + one cached render pipeline per
+                      material class and pipeline state
+      GpuResources.js lazy caches: vertex/index/uniform buffers, bind groups
     cameras/
       Camera.js       shared base: lookAt target + view/projection matrices
       PerspectiveCamera.js
@@ -94,7 +97,8 @@ src/
       Shape2d.js      geometry + material (the 2D Mesh)
       InstancedShape2d.js  the 2D InstancedMesh
       Renderer2d.js   no depth buffer: zIndex sorting + alpha blending
-      GpuResources2d.js lazy caches for the 2D pipelines and buffers
+      Pipelines2d.js  the 2D pipeline cache (alpha blending, no depth)
+      GpuResources2d.js lazy caches for the 2D buffers and bind groups
     cameras/
       Camera2d.js     pan/zoom/rotation as a single Mat3, no perspective
     controls/
@@ -109,6 +113,9 @@ src/
       Material2d.js   base class + shared WGSL vertex shader and uniform structs
       BasicMaterial2d.js  flat color, alpha-blended
       SpriteMaterial2d.js texture `map` times color — the 2D sprite
+
+test/                 unit tests for the math and scene-graph classes
+                      (Node's built-in test runner, no dependencies)
 ```
 
 ## Minimal usage
@@ -186,6 +193,34 @@ function frame() {
 requestAnimationFrame(frame);
 ```
 
+## How a frame happens
+
+One `renderer.render(scene, camera)` call, start to finish:
+
+1. `scene.updateWorldMatrix()` recomposes every object's local matrix
+   from its position/rotation/scale and multiplies down the tree, so
+   each object ends up with an up-to-date `worldMatrix`.
+2. `camera.updateMatrices()` rebuilds the projection and view matrices
+   and their product, the view-projection matrix.
+3. The frame uniforms — the view-projection matrix plus the lights found
+   by a scene traversal — are written into the `@group(0)` uniform
+   buffer.
+4. A single render pass begins, clearing the canvas and the depth
+   buffer.
+5. The scene is traversed and every visible `Mesh` is drawn:
+   - `GpuResources` hands back the geometry's vertex/index buffers, the
+     mesh's uniform buffer + bind group, and the material's pipeline
+     (from `Pipelines`) — each created on first use and cached after;
+   - the model matrix, normal matrix and color are written into the
+     mesh's `@group(1)` uniform buffer;
+   - the pass sets the pipeline, bind group and buffers, and issues one
+     `drawIndexed` (with the instance count for an `InstancedMesh`).
+6. The pass ends and the command buffer is submitted to the GPU queue.
+
+`Renderer2d` follows the same shape minus the depth buffer: visible
+shapes are collected, sorted by `zIndex`, and drawn back-to-front with
+alpha blending on.
+
 ## How the WebGPU pieces fit together
 
 - **Renderer.init()** requests the GPU adapter and device, configures the canvas
@@ -212,6 +247,18 @@ requestAnimationFrame(frame);
   with one `drawIndexed` — thousands of objects for a couple of draw calls.
 - **render()** updates world matrices, writes the uniforms, records a single
   render pass with a `depth24plus` depth attachment, and submits it.
+
+## Tests
+
+The math and scene-graph classes are covered by unit tests built on
+Node's built-in test runner — no dependencies:
+
+```
+npm test
+```
+
+Everything GPU-side is verified by running the demo (there is nothing to
+mock: the value of a renderer is what it puts on screen).
 
 ## Deliberate limitations (it's _micro_)
 

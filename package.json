@@ -1,0 +1,8 @@
+{
+  "name": "micro-gl",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
