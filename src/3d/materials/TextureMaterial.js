@@ -10,6 +10,8 @@ export class TextureMaterial extends Material {
   /** @param {{map: Texture, color?: number[]}} options see Material for the rest */
   constructor(options = {}) {
     super(options);
+    /** Tells the pipeline cache to reject a cleared `map` legibly. */
+    this.requiresMap = true;
     if (!this.map) {
       throw new Error('TextureMaterial requires a `map` texture');
     }

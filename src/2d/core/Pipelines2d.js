@@ -74,6 +74,15 @@ export class Pipelines2d {
 
   /** The render pipeline for a material's class and pipeline state. */
   pipelineFor(material, instanced = false) {
+    if (material.requiresMap && !material.map) {
+      // Without this the missing texture bindings surface later as a
+      // cryptic pipeline/bind-group validation error.
+      throw new Error(
+        `${material.constructor.name}: \`map\` was cleared, but this ` +
+          'material always samples its texture — assign a Texture or ' +
+          'switch to a material without a map',
+      );
+    }
     const { topology, cullMode, frontFace } = material;
     let variants = this._cache.get(material.constructor);
     if (!variants) {

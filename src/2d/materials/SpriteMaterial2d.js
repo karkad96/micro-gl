@@ -14,6 +14,8 @@ export class SpriteMaterial2d extends Material2d {
   /** @param {{map: Texture, color?: number[]}} options see Material2d for the rest */
   constructor(options = {}) {
     super(options);
+    /** Tells the pipeline cache to reject a cleared `map` legibly. */
+    this.requiresMap = true;
     if (!this.map) {
       throw new Error('SpriteMaterial2d requires a `map` texture');
     }

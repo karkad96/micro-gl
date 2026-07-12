@@ -27,6 +27,7 @@ export class DragControls2d {
     this.objects = objects;
     this.camera = camera;
     this.domElement = domElement;
+    /** Set to false to ignore input; it also pauses an in-progress drag. */
     this.enabled = true;
     this.selected = null;
 
@@ -58,7 +59,7 @@ export class DragControls2d {
     };
 
     this._onPointerMove = (e) => {
-      if (!this._dragging || !this.selected) return;
+      if (!this.enabled || !this._dragging || !this.selected) return;
       const point = this._pointerToWorld(e);
 
       // New world position, then into the parent's local space.

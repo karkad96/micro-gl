@@ -30,7 +30,14 @@ const OBJECT_COLOR = 12;
  *   await renderer2d.init(renderer3d);
  */
 export class Renderer2d {
-  constructor(canvas) {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {object} [options]
+   * @param {boolean} [options.autoResize] follow the canvas's CSS size
+   *   with a ResizeObserver, calling setSize automatically (default
+   *   false — call setSize yourself)
+   */
+  constructor(canvas, { autoResize = false } = {}) {
     this.canvas = canvas;
     this.device = null;
     this.context = null;
@@ -38,6 +45,9 @@ export class Renderer2d {
     /** How many shapes the last render() call drew. */
     this.drawCount = 0;
 
+    this._autoResize = autoResize;
+    this._resizeObserver = null;
+    this._ownsDevice = false;
     this._resources = null;
     this._drawList = [];
   }
@@ -50,6 +60,7 @@ export class Renderer2d {
    * @param {{device, context, format}} [shared]
    */
   async init(shared) {
+    this._ownsDevice = !shared;
     const gpu = shared || (await initWebGpu(this.canvas));
     this.device = gpu.device;
     this.context = gpu.context;
@@ -70,6 +81,13 @@ export class Renderer2d {
       this.canvas.clientWidth || 300,
       this.canvas.clientHeight || 150,
     );
+    if (this._autoResize && typeof ResizeObserver !== 'undefined') {
+      this._resizeObserver = new ResizeObserver((entries) => {
+        const { width, height } = entries[0].contentRect;
+        if (width > 0 && height > 0) this.setSize(width, height);
+      });
+      this._resizeObserver.observe(this.canvas);
+    }
     return this;
   }
 
@@ -128,6 +146,29 @@ export class Renderer2d {
 
     pass.end();
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  /**
+   * Releases everything the renderer itself owns: the resize observer,
+   * the frame uniform buffer and — when this renderer created the GPU
+   * device rather than sharing one via init(shared) — the device
+   * itself. Per-object GPU state lives on the scene objects; release
+   * it with object.dispose(), geometry.dispose() and
+   * texture.dispose(). The renderer cannot be used after this.
+   */
+  dispose() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._frameUniformBuffer) this._frameUniformBuffer.destroy();
+    this._frameUniformBuffer = null;
+    if (this._ownsDevice && this.device) {
+      this.context.unconfigure();
+      this.device.destroy();
+    }
+    this.device = null;
+    this.context = null;
   }
 
   _drawShape(pass, shape) {
