@@ -25,10 +25,7 @@ export class TextureMaterial extends Material {
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
   let base = textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
-  let n = normalize(input.worldNormal);
-  let toLight = normalize(-uFrame.lightDirection);
-  let diffuse = max(dot(n, toLight), 0.0) * uFrame.lightColor;
-  let lighting = uFrame.ambientColor + diffuse;
+  let lighting = diffuseLighting(normalize(input.worldNormal), input.worldPosition);
   return vec4f(linearToSrgb(base.rgb * lighting), base.a);
 }
 `;

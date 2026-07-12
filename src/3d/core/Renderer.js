@@ -5,16 +5,23 @@ import { GpuResources } from './GpuResources.js';
 import { initWebGpu } from '../../core/initWebGpu.js';
 import { DirectionalLight } from '../lights/DirectionalLight.js';
 import { AmbientLight } from '../lights/AmbientLight.js';
+import { PointLight } from '../lights/PointLight.js';
+import { MAX_POINT_LIGHTS } from '../materials/Material.js';
 
-// FrameUniforms: mat4x4f (64) + three vec3f padded to 16 bytes each
-// = 112 bytes, matching the WGSL struct in Material.js.
-const FRAME_UNIFORM_SIZE = 112;
+// FrameUniforms: mat4x4f (64) + three vec3f in 16-byte slots (the
+// point-light count packs into ambientColor's slot) + MAX_POINT_LIGHTS
+// point lights at 32 bytes each, matching the WGSL struct in Material.js.
+const FRAME_UNIFORM_SIZE = 112 + MAX_POINT_LIGHTS * 32;
 // Float offsets of the FrameUniforms fields; the skipped indices
-// (19, 23, 27) are the vec3f padding.
+// (19, 23) are the vec3f padding.
 const VIEW_PROJECTION = 0;
 const LIGHT_DIRECTION = 16;
 const LIGHT_COLOR = 20;
 const AMBIENT_COLOR = 24;
+const POINT_LIGHT_COUNT = 27;
+// Each light: position (3 floats + pad), color (3 floats + pad).
+const POINT_LIGHTS = 28;
+const POINT_LIGHT_STRIDE = 8;
 
 // Float offsets of the ObjectUniforms fields, matching the WGSL struct
 // in Material.js (two mat4x4f, then a vec4f).
@@ -217,22 +224,36 @@ export class Renderer {
   }
 
   _writeFrameUniforms(scene, camera) {
+    const data = this._frameData;
     let directional = null;
+    let pointLightCount = 0;
     let ambientR = 0,
       ambientG = 0,
       ambientB = 0;
     scene.traverseVisible((object) => {
       if (!directional && object instanceof DirectionalLight)
         directional = object;
-      if (object instanceof AmbientLight) {
+      if (object instanceof PointLight && pointLightCount < MAX_POINT_LIGHTS) {
+        const base = POINT_LIGHTS + pointLightCount * POINT_LIGHT_STRIDE;
+        // The light shines from its scene-graph world position.
+        const w = object.worldMatrix.elements;
+        data[base] = w[12];
+        data[base + 1] = w[13];
+        data[base + 2] = w[14];
         // Colors are authored in sRGB; lighting happens in linear.
+        data[base + 4] = srgbToLinear(object.color[0]) * object.intensity;
+        data[base + 5] = srgbToLinear(object.color[1]) * object.intensity;
+        data[base + 6] = srgbToLinear(object.color[2]) * object.intensity;
+        pointLightCount++;
+      }
+      if (object instanceof AmbientLight) {
         ambientR += srgbToLinear(object.color[0]) * object.intensity;
         ambientG += srgbToLinear(object.color[1]) * object.intensity;
         ambientB += srgbToLinear(object.color[2]) * object.intensity;
       }
     });
+    data[POINT_LIGHT_COUNT] = pointLightCount;
 
-    const data = this._frameData;
     data.set(camera.viewProjectionMatrix.elements, VIEW_PROJECTION);
 
     if (directional) {

@@ -94,6 +94,8 @@ src/
     lights/
       DirectionalLight.js
       AmbientLight.js
+      PointLight.js   a lamp: radiates from its scene-graph position,
+                      fading with distance (up to 4 per scene)
 
   2d/                 the 2D engine — flat counterparts of the 3D classes
     core/
@@ -247,7 +249,8 @@ alpha blending on.
 - **Uniforms** are split into two bind groups, matching the WGSL in
   `Material.js`:
   - `@group(0)` _frame_ uniforms — view-projection matrix, light direction/color,
-    ambient color. Written once per frame.
+    ambient color, and up to `MAX_POINT_LIGHTS` (4) point lights (world
+    position + color). Written once per frame.
   - `@group(1)` _object_ uniforms — model matrix, normal matrix, color. Each
     mesh gets its own small uniform buffer and bind group (created lazily on
     first draw). Materials with a `map` use a second layout that adds the
@@ -294,7 +297,7 @@ mock: the value of a renderer is what it puts on screen).
 
 ## Deliberate limitations (it's _micro_)
 
-- One directional light + ambient; no shadows.
+- One directional light, up to four point lights, and ambient; no shadows.
 - Cameras orient via `lookAt` target, not via their `rotation` Euler angles.
 - Transparent meshes sort back-to-front by their origin's depth, not per
   triangle, so intersecting or nested transparent meshes can blend in the
@@ -303,5 +306,5 @@ mock: the value of a renderer is what it puts on screen).
   shader uses the instance matrix directly instead of its inverse
   transpose).
 
-Natural next steps if you want to grow it: point lights, a
-wireframe/grid helper, and shadow mapping.
+Natural next steps if you want to grow it: a wireframe/grid helper
+and shadow mapping.

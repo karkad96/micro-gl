@@ -61,15 +61,30 @@ export class Material {
 }
 
 /**
+ * The most point lights one frame can carry — the WGSL array below is
+ * fixed-size, so this is baked into every shader. The renderer uses
+ * the first MAX_POINT_LIGHTS visible PointLights it finds.
+ */
+export const MAX_POINT_LIGHTS = 4;
+
+/**
  * Uniform structs shared by both vertex stages. Field offsets must
  * match what Renderer writes into the uniform buffers.
  */
 const STRUCTS_WGSL = /* wgsl */ `
+struct PointLightUniform {
+  position: vec3f, // world space
+  color: vec3f,    // linear, premultiplied by intensity
+};
+
 struct FrameUniforms {
   viewProjection: mat4x4f,
   lightDirection: vec3f,
   lightColor: vec3f,
   ambientColor: vec3f,
+  // Packs into ambientColor's 16-byte slot; how many array entries are live.
+  pointLightCount: f32,
+  pointLights: array<PointLightUniform, ${MAX_POINT_LIGHTS}>,
 };
 
 struct ObjectUniforms {
@@ -95,6 +110,27 @@ fn linearToSrgb(c: vec3f) -> vec3f {
   let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - 0.055;
   return select(hi, lo, c <= vec3f(0.0031308));
 }
+
+// Ambient + the directional light + the point lights on a diffuse
+// surface, in linear space. Lit fragment shaders multiply the surface
+// color by this.
+fn diffuseLighting(n: vec3f, worldPosition: vec3f) -> vec3f {
+  var lighting = uFrame.ambientColor;
+  let toLight = normalize(-uFrame.lightDirection);
+  lighting += max(dot(n, toLight), 0.0) * uFrame.lightColor;
+  let count = u32(uFrame.pointLightCount);
+  for (var i = 0u; i < count; i++) {
+    let offset = uFrame.pointLights[i].position - worldPosition;
+    let distanceSq = max(dot(offset, offset), 1e-6);
+    // 1 / (1 + d^2) falloff: intensity is the brightness right at the
+    // light, fading smoothly and never blowing up at zero distance.
+    let attenuation = 1.0 / (1.0 + distanceSq);
+    let direction = offset * inverseSqrt(distanceSq);
+    lighting += max(dot(n, direction), 0.0) * attenuation
+      * uFrame.pointLights[i].color;
+  }
+  return lighting;
+}
 `;
 
 /**
@@ -109,6 +145,7 @@ struct VertexOut {
   @builtin(position) position: vec4f,
   @location(0) worldNormal: vec3f,
   @location(1) uv: vec2f,
+  @location(2) worldPosition: vec3f,
 };
 
 @vertex
@@ -118,6 +155,7 @@ fn vs(input: VertexIn) -> VertexOut {
   out.position = uFrame.viewProjection * worldPosition;
   out.worldNormal = (uObject.normalMatrix * vec4f(input.normal, 0.0)).xyz;
   out.uv = input.uv;
+  out.worldPosition = worldPosition.xyz;
   return out;
 }
 
@@ -149,6 +187,7 @@ struct VertexOut {
   @location(0) worldNormal: vec3f,
   @location(1) uv: vec2f,
   @location(2) color: vec4f,
+  @location(3) worldPosition: vec3f,
 };
 
 @vertex
@@ -163,6 +202,7 @@ fn vs(input: VertexIn, instance: InstanceIn) -> VertexOut {
   out.worldNormal = (uObject.normalMatrix * vec4f(rotation * input.normal, 0.0)).xyz;
   out.uv = input.uv;
   out.color = instance.color;
+  out.worldPosition = worldPosition.xyz;
   return out;
 }
 
