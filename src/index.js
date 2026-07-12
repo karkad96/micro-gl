@@ -33,6 +33,7 @@ export { Geometry } from './3d/geometries/Geometry.js';
 export { BoxGeometry } from './3d/geometries/BoxGeometry.js';
 export { SphereGeometry } from './3d/geometries/SphereGeometry.js';
 export { PlaneGeometry } from './3d/geometries/PlaneGeometry.js';
+export { WireframeGeometry } from './3d/geometries/WireframeGeometry.js';
 
 export { Material, MAX_POINT_LIGHTS } from './3d/materials/Material.js';
 export { BasicMaterial } from './3d/materials/BasicMaterial.js';
@@ -42,6 +43,8 @@ export { TextureMaterial } from './3d/materials/TextureMaterial.js';
 export { DirectionalLight } from './3d/lights/DirectionalLight.js';
 export { AmbientLight } from './3d/lights/AmbientLight.js';
 export { PointLight } from './3d/lights/PointLight.js';
+
+export { GridHelper } from './3d/helpers/GridHelper.js';
 
 // --- 2D engine --------------------------------------------------------------
 export { Object2d } from './2d/core/Object2d.js';
