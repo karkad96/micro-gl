@@ -13,9 +13,11 @@ import { VERTEX_STRIDE } from '../geometries/Geometry.js';
  * after the opaque meshes, sorted back-to-front).
  */
 export class Pipelines {
-  constructor(device, format) {
+  constructor(device, format, sampleCount = 1) {
     this.device = device;
     this.format = format;
+    /** MSAA sample count of the renderer's color/depth targets. */
+    this.sampleCount = sampleCount;
     // material class -> Map of pipeline-state key -> GPURenderPipeline
     this._cache = new Map();
     // WGSL source -> GPUShaderModule, so pipeline variants that share a
@@ -161,6 +163,7 @@ export class Pipelines {
         targets: [target],
       },
       primitive,
+      multisample: { count: this.sampleCount },
       depthStencil: {
         format: 'depth24plus',
         // Transparent meshes test against the depth buffer (opaque

@@ -38,8 +38,11 @@ export class Renderer {
    * @param {boolean} [options.autoResize] follow the canvas's CSS size
    *   with a ResizeObserver, calling setSize automatically (default
    *   false — call setSize yourself)
+   * @param {boolean} [options.antialias] draw into a 4x multisampled
+   *   target that resolves to the canvas (default true), smoothing
+   *   edges; set false to render aliased at slightly lower cost
    */
-  constructor(canvas, { autoResize = false } = {}) {
+  constructor(canvas, { autoResize = false, antialias = true } = {}) {
     this.canvas = canvas;
     this.device = null;
     this.context = null;
@@ -48,11 +51,14 @@ export class Renderer {
     this.drawCount = 0;
 
     this._autoResize = autoResize;
+    this._sampleCount = antialias ? 4 : 1;
     this._resizeObserver = null;
     this._ownsDevice = false;
     this._resources = null;
     this._depthTexture = null;
     this._depthView = null;
+    this._msaaTexture = null;
+    this._msaaView = null;
     this._opaqueList = [];
     this._transparentList = [];
     this._frameData = new Float32Array(FRAME_UNIFORM_SIZE / 4);
@@ -75,7 +81,11 @@ export class Renderer {
     this.context = gpu.context;
     this.format = gpu.format;
 
-    this._resources = new GpuResources(this.device, this.format);
+    this._resources = new GpuResources(
+      this.device,
+      this.format,
+      this._sampleCount,
+    );
 
     this._frameUniformBuffer = this.device.createBuffer({
       size: FRAME_UNIFORM_SIZE,
@@ -107,13 +117,29 @@ export class Renderer {
     this.canvas.height = Math.max(1, Math.floor(height * pixelRatio));
 
     if (!this.device) return;
+    const size = [this.canvas.width, this.canvas.height];
     if (this._depthTexture) this._depthTexture.destroy();
     this._depthTexture = this.device.createTexture({
-      size: [this.canvas.width, this.canvas.height],
+      size,
       format: 'depth24plus',
+      sampleCount: this._sampleCount,
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
     this._depthView = this._depthTexture.createView();
+    if (this._msaaTexture) this._msaaTexture.destroy();
+    this._msaaTexture = null;
+    this._msaaView = null;
+    if (this._sampleCount > 1) {
+      // The multisampled color target the pass draws into; it resolves
+      // to the swap chain texture at the end of every render pass.
+      this._msaaTexture = this.device.createTexture({
+        size,
+        format: this.format,
+        sampleCount: this._sampleCount,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this._msaaView = this._msaaTexture.createView();
+    }
   }
 
   /** Draws one frame of `scene` as seen from `camera`. */
@@ -154,14 +180,25 @@ export class Renderer {
     }
 
     const encoder = this.device.createCommandEncoder();
+    const swapView = this.context.getCurrentTexture().createView();
     const pass = encoder.beginRenderPass({
       colorAttachments: [
-        {
-          view: this.context.getCurrentTexture().createView(),
-          clearValue: scene.background,
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
+        this._msaaView
+          ? {
+              view: this._msaaView,
+              // The resolved copy is what reaches the screen; the raw
+              // samples aren't needed after the pass, so discard them.
+              resolveTarget: swapView,
+              clearValue: scene.background,
+              loadOp: 'clear',
+              storeOp: 'discard',
+            }
+          : {
+              view: swapView,
+              clearValue: scene.background,
+              loadOp: 'clear',
+              storeOp: 'store',
+            },
       ],
       depthStencilAttachment: {
         view: this._depthView,
@@ -239,9 +276,12 @@ export class Renderer {
     }
     if (this._frameUniformBuffer) this._frameUniformBuffer.destroy();
     if (this._depthTexture) this._depthTexture.destroy();
+    if (this._msaaTexture) this._msaaTexture.destroy();
     this._frameUniformBuffer = null;
     this._depthTexture = null;
     this._depthView = null;
+    this._msaaTexture = null;
+    this._msaaView = null;
     if (this._ownsDevice && this.device) {
       this.context.unconfigure();
       this.device.destroy();

@@ -36,8 +36,11 @@ export class Renderer2d {
    * @param {boolean} [options.autoResize] follow the canvas's CSS size
    *   with a ResizeObserver, calling setSize automatically (default
    *   false — call setSize yourself)
+   * @param {boolean} [options.antialias] draw into a 4x multisampled
+   *   target that resolves to the canvas (default true), smoothing
+   *   edges; set false to render aliased at slightly lower cost
    */
-  constructor(canvas, { autoResize = false } = {}) {
+  constructor(canvas, { autoResize = false, antialias = true } = {}) {
     this.canvas = canvas;
     this.device = null;
     this.context = null;
@@ -46,9 +49,12 @@ export class Renderer2d {
     this.drawCount = 0;
 
     this._autoResize = autoResize;
+    this._sampleCount = antialias ? 4 : 1;
     this._resizeObserver = null;
     this._ownsDevice = false;
     this._resources = null;
+    this._msaaTexture = null;
+    this._msaaView = null;
     this._drawList = [];
   }
 
@@ -66,7 +72,11 @@ export class Renderer2d {
     this.context = gpu.context;
     this.format = gpu.format;
 
-    this._resources = new GpuResources2d(this.device, this.format);
+    this._resources = new GpuResources2d(
+      this.device,
+      this.format,
+      this._sampleCount,
+    );
 
     this._frameUniformBuffer = this.device.createBuffer({
       size: FRAME_UNIFORM_SIZE,
@@ -96,6 +106,22 @@ export class Renderer2d {
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
     this.canvas.width = Math.max(1, Math.floor(width * pixelRatio));
     this.canvas.height = Math.max(1, Math.floor(height * pixelRatio));
+
+    if (!this.device) return;
+    if (this._msaaTexture) this._msaaTexture.destroy();
+    this._msaaTexture = null;
+    this._msaaView = null;
+    if (this._sampleCount > 1) {
+      // The multisampled color target the pass draws into; it resolves
+      // to the swap chain texture at the end of every render pass.
+      this._msaaTexture = this.device.createTexture({
+        size: [this.canvas.width, this.canvas.height],
+        format: this.format,
+        sampleCount: this._sampleCount,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      this._msaaView = this._msaaTexture.createView();
+    }
   }
 
   /** Draws one frame of `scene` as seen from `camera`. */
@@ -128,14 +154,25 @@ export class Renderer2d {
     this.drawCount = drawCount;
 
     const encoder = this.device.createCommandEncoder();
+    const swapView = this.context.getCurrentTexture().createView();
     const pass = encoder.beginRenderPass({
       colorAttachments: [
-        {
-          view: this.context.getCurrentTexture().createView(),
-          clearValue: scene.background,
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
+        this._msaaView
+          ? {
+              view: this._msaaView,
+              // The resolved copy is what reaches the screen; the raw
+              // samples aren't needed after the pass, so discard them.
+              resolveTarget: swapView,
+              clearValue: scene.background,
+              loadOp: 'clear',
+              storeOp: 'discard',
+            }
+          : {
+              view: swapView,
+              clearValue: scene.background,
+              loadOp: 'clear',
+              storeOp: 'store',
+            },
       ],
     });
 
@@ -162,7 +199,10 @@ export class Renderer2d {
       this._resizeObserver = null;
     }
     if (this._frameUniformBuffer) this._frameUniformBuffer.destroy();
+    if (this._msaaTexture) this._msaaTexture.destroy();
     this._frameUniformBuffer = null;
+    this._msaaTexture = null;
+    this._msaaView = null;
     if (this._ownsDevice && this.device) {
       this.context.unconfigure();
       this.device.destroy();

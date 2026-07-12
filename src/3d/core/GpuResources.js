@@ -19,9 +19,9 @@ export const OBJECT_UNIFORM_SIZE = 144;
  * forwarded from there.
  */
 export class GpuResources {
-  constructor(device, format) {
+  constructor(device, format, sampleCount = 1) {
     this.device = device;
-    this.pipelines = new Pipelines(device, format);
+    this.pipelines = new Pipelines(device, format, sampleCount);
     // The renderer builds its per-frame bind group against this layout.
     this.frameBindGroupLayout = this.pipelines.frameBindGroupLayout;
   }
