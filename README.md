@@ -85,6 +85,8 @@ src/
       BoxGeometry.js
       SphereGeometry.js
       PlaneGeometry.js  XZ ground plane facing +Y
+      WireframeGeometry.js  the unique edges of any triangle geometry,
+                      for drawing with a line-list material
     materials/
       Material.js     base class + shared WGSL vertex shader and uniform structs
       BasicMaterial.js  unlit flat color
@@ -96,6 +98,9 @@ src/
       AmbientLight.js
       PointLight.js   a lamp: radiates from its scene-graph position,
                       fading with distance (up to 4 per scene)
+    helpers/
+      GridHelper.js   a line grid in the XZ plane — the usual ground
+                      reference while building a scene
 
   2d/                 the 2D engine — flat counterparts of the 3D classes
     core/
@@ -306,5 +311,4 @@ mock: the value of a renderer is what it puts on screen).
   shader uses the instance matrix directly instead of its inverse
   transpose).
 
-Natural next steps if you want to grow it: a wireframe/grid helper
-and shadow mapping.
+The natural next step if you want to grow it: shadow mapping.
