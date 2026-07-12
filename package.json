@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:webgpu": "node --test test-browser/webgpu-runner.js"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.1"
   }
 }

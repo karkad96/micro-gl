@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>micro-gl WebGPU smoke test</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+
+      body {
+        margin: 1rem;
+        background: #11151c;
+        color: #dce5f2;
+      }
+
+      canvas {
+        width: 128px;
+        height: 128px;
+        border: 1px solid #526075;
+      }
+
+      pre {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>micro-gl WebGPU smoke test</h1>
+    <canvas id="gpu-canvas" width="128" height="128"></canvas>
+    <pre id="result">Running…</pre>
+    <script type="module" src="./smoke.js"></script>
+  </body>
+</html>

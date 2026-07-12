@@ -145,7 +145,8 @@ src/
       SpriteMaterial2d.js texture `map` times color — the 2D sprite
 
 test/                 unit/regression tests plus small GPU-device fakes
-                      (Node's built-in test runner, no dependencies)
+                      (the unit suite uses only Node built-ins)
+test-browser/         real WebGPU smoke fixture + installed-browser runner
 ```
 
 ## Minimal usage
@@ -332,14 +333,29 @@ alpha blending on.
 
 Math, scene graphs, controls, resource lifecycles, shader composition and
 pipeline descriptors are covered with Node's built-in test runner and small
-fakes — no dependencies:
+GPU fakes:
 
 ```
 npm test
 ```
 
-Shader composition and pipeline descriptors are unit-tested with small device
-fakes. Final GPU behavior is verified by running the demo in a WebGPU browser.
+After `npm install`, the opt-in browser suite uses `playwright-core` to drive an
+installed Chrome or Edge browser without downloading another browser binary:
+
+```
+npm run test:webgpu
+```
+
+It compiles every stock regular/instanced WGSL module, renders the 2D and 3D
+material, texture, transparency and topology variants through both 1x and 4x
+pipelines, checks WebGPU error scopes and uncaptured errors, exercises shared
+renderer resizing/disposal, and reads known pixels back through a GPU buffer.
+The command reports a skip when no browser or WebGPU adapter is available; set
+`MICRO_GL_REQUIRE_WEBGPU=1` in CI to turn that into a failure.
+
+Set `MICRO_GL_BROWSER_PATH` to use a non-standard Chrome/Edge location,
+`MICRO_GL_HEADED=1` to watch the test, or `MICRO_GL_BROWSER_ARGS` to a JSON
+array of additional launch flags when a CI GPU setup needs them.
 
 ## Deliberate limitations (it's _micro_)
 
