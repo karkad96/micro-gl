@@ -77,6 +77,67 @@ test('updateWorldMatrix chains parent transforms (2D)', () => {
   assert.deepEqual([e[8], e[9]], [1, 2]);
 });
 
+test('traverseVisible skips an invisible object and its whole subtree', () => {
+  const root = new Object3d();
+  const group = new Object3d();
+  const child = new Object3d();
+  root.add(group);
+  group.add(child);
+
+  group.visible = false;
+  const visited = [];
+  root.traverseVisible((object) => visited.push(object));
+  assert.deepEqual(visited, [root]);
+
+  group.visible = true;
+  child.visible = false;
+  visited.length = 0;
+  root.traverseVisible((object) => visited.push(object));
+  assert.deepEqual(visited, [root, group]);
+});
+
+test('traverseVisible skips invisible subtrees in 2D too', () => {
+  const root = new Object2d();
+  const group = new Object2d();
+  const child = new Object2d();
+  root.add(group);
+  group.add(child);
+  group.visible = false;
+  const visited = [];
+  root.traverseVisible((object) => visited.push(object));
+  assert.deepEqual(visited, [root]);
+});
+
+test('Raycaster ignores meshes inside an invisible group', () => {
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 0, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrices();
+
+  const group = new Object3d();
+  const mesh = new Mesh(new BoxGeometry(2, 2, 2), {});
+  group.add(mesh);
+  group.updateWorldMatrix();
+
+  const raycaster = new Raycaster().setFromCamera(0, 0, camera);
+  assert.equal(raycaster.intersectObjects([group]).length, 1);
+  group.visible = false;
+  assert.equal(raycaster.intersectObjects([group]).length, 0);
+});
+
+test('geometry.needsUpdate invalidates the cached bounds', () => {
+  const box = new BoxGeometry(2, 2, 2);
+  assert.deepEqual(box.bounds.max, [1, 1, 1]);
+
+  // Stretch the +X face's corners out to x = 5 and re-flag.
+  for (let i = 0; i < box.vertices.length; i += VERTEX_SIZE) {
+    if (box.vertices[i] === 1) box.vertices[i] = 5;
+  }
+  box.needsUpdate = true;
+  assert.equal(box.needsUpdate, true);
+  assert.deepEqual(box.bounds.max, [5, 1, 1]);
+});
+
 test('dispose() destroys per-object GPU buffers and forgets them', () => {
   const object = new Object3d();
   let destroyed = 0;

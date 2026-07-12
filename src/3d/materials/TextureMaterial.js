@@ -27,7 +27,7 @@ fn fs(input: VertexOut) -> @location(0) vec4f {
   let toLight = normalize(-uFrame.lightDirection);
   let diffuse = max(dot(n, toLight), 0.0) * uFrame.lightColor;
   let lighting = uFrame.ambientColor + diffuse;
-  return vec4f(base.rgb * lighting, base.a);
+  return vec4f(linearToSrgb(base.rgb * lighting), base.a);
 }
 `;
   }

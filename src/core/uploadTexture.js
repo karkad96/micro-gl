@@ -13,10 +13,14 @@ export function uploadTexture(device, texture) {
     const levels = texture.mipmaps
       ? mipLevelCount(texture.width, texture.height)
       : 1;
+    // An sRGB format makes the GPU decode samples to linear (and
+    // re-encode when the mipmap pass renders into a level), so shading
+    // and mip filtering happen in linear space.
+    const format = texture.srgb ? 'rgba8unorm-srgb' : 'rgba8unorm';
     const gpuTexture = device.createTexture({
       size,
       mipLevelCount: levels,
-      format: 'rgba8unorm',
+      format,
       // copyExternalImageToTexture requires RENDER_ATTACHMENT usage.
       usage:
         GPUTextureUsage.TEXTURE_BINDING |
@@ -28,7 +32,7 @@ export function uploadTexture(device, texture) {
       { texture: gpuTexture },
       size,
     );
-    if (levels > 1) generateMipmaps(device, gpuTexture, levels);
+    if (levels > 1) generateMipmaps(device, gpuTexture, levels, format);
     const sampler = device.createSampler({
       magFilter: texture.magFilter,
       minFilter: texture.minFilter,

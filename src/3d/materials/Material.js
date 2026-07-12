@@ -86,6 +86,15 @@ struct VertexIn {
   @location(1) normal: vec3f,
   @location(2) uv: vec2f,
 };
+
+// Shading happens in linear space (colors are decoded by the renderer,
+// texture samples by their '-srgb' format); this encodes the finished
+// color for the non-sRGB swap chain. Fragment shaders end with it.
+fn linearToSrgb(c: vec3f) -> vec3f {
+  let lo = c * 12.92;
+  let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - 0.055;
+  return select(hi, lo, c <= vec3f(0.0031308));
+}
 `;
 
 /**

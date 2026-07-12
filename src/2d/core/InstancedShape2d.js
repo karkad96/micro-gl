@@ -1,4 +1,5 @@
 import { Shape2d } from './Shape2d.js';
+import { srgbToLinear } from '../../math/color.js';
 
 /**
  * Floats per instance: a mat3 in the padded column layout Mat3 uses
@@ -46,12 +47,17 @@ export class InstancedShape2d extends Shape2d {
     return this;
   }
 
-  /** Sets instance `index`'s color from [r, g, b] or [r, g, b, a]. */
+  /**
+   * Sets instance `index`'s color from [r, g, b] or [r, g, b, a] —
+   * sRGB display values like material colors. They are stored
+   * linearized (shading happens in linear space), so write linear
+   * values if you fill `instanceData` directly instead.
+   */
   setColorAt(index, color) {
     const base = index * INSTANCE_SIZE_2D + 12;
-    this.instanceData[base] = color[0];
-    this.instanceData[base + 1] = color[1];
-    this.instanceData[base + 2] = color[2];
+    this.instanceData[base] = srgbToLinear(color[0]);
+    this.instanceData[base + 1] = srgbToLinear(color[1]);
+    this.instanceData[base + 2] = srgbToLinear(color[2]);
     this.instanceData[base + 3] = color.length > 3 ? color[3] : 1;
     this.needsUpdate = true;
     return this;
