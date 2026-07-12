@@ -20,9 +20,9 @@ export const OBJECT_UNIFORM_SIZE_2D = 64;
  * forwarded from there.
  */
 export class GpuResources2d {
-  constructor(device, format) {
+  constructor(device, format, sampleCount = 1) {
     this.device = device;
-    this.pipelines = new Pipelines2d(device, format);
+    this.pipelines = new Pipelines2d(device, format, sampleCount);
     // Renderer2d builds its per-frame bind group against this layout.
     this.frameBindGroupLayout = this.pipelines.frameBindGroupLayout;
   }

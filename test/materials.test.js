@@ -4,6 +4,8 @@ import { Pipelines } from '../src/3d/core/Pipelines.js';
 import { Pipelines2d } from '../src/2d/core/Pipelines2d.js';
 import { TextureMaterial } from '../src/3d/materials/TextureMaterial.js';
 import { SpriteMaterial2d } from '../src/2d/materials/SpriteMaterial2d.js';
+import { BasicMaterial } from '../src/3d/materials/BasicMaterial.js';
+import { BasicMaterial2d } from '../src/2d/materials/BasicMaterial2d.js';
 
 // Enough of a GPUDevice for the pipeline caches' constructors; the
 // guard under test throws before any pipeline is actually built.
@@ -37,4 +39,34 @@ test('a SpriteMaterial2d whose map was cleared fails with a clear error', () => 
     () => pipelines.pipelineFor(material),
     /SpriteMaterial2d.*map.*was cleared/,
   );
+});
+
+/** A fake device that records every render pipeline descriptor. */
+function capturingDevice(captured) {
+  return {
+    ...fakeDevice,
+    createShaderModule: () => ({}),
+    createRenderPipeline: (descriptor) => {
+      captured.push(descriptor);
+      return { descriptor };
+    },
+  };
+}
+
+test('the renderer sample count is baked into every 3D pipeline, once per state', () => {
+  const captured = [];
+  const pipelines = new Pipelines(capturingDevice(captured), 'bgra8unorm', 4);
+  const first = pipelines.pipelineFor(new BasicMaterial());
+  const second = pipelines.pipelineFor(new BasicMaterial());
+  assert.equal(first, second); // same class + state compiles once
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].multisample.count, 4);
+  assert.equal(captured[0].depthStencil.format, 'depth24plus');
+});
+
+test('the renderer sample count is baked into every 2D pipeline', () => {
+  const captured = [];
+  const pipelines = new Pipelines2d(capturingDevice(captured), 'bgra8unorm', 4);
+  pipelines.pipelineFor(new BasicMaterial2d());
+  assert.equal(captured[0].multisample.count, 4);
 });

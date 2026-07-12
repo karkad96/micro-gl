@@ -212,8 +212,10 @@ One `renderer.render(scene, camera)` call, start to finish:
 3. The frame uniforms — the view-projection matrix plus the lights found
    by a scene traversal — are written into the `@group(0)` uniform
    buffer.
-4. A single render pass begins, clearing the canvas and the depth
-   buffer.
+4. A single render pass begins, clearing the color target and the
+   depth buffer. By default both are 4x multisampled and the color
+   resolves to the canvas when the pass ends (`antialias: false`
+   renders straight to the canvas instead).
 5. The scene is traversed and visible meshes are collected (an object
    with `visible = false` is skipped along with its whole subtree —
    hiding a group hides everything in it): opaque ones
@@ -273,7 +275,10 @@ alpha blending on.
   into a second, instance-stepped vertex buffer and draws all instances
   with one `drawIndexed` — thousands of objects for a couple of draw calls.
 - **render()** updates world matrices, writes the uniforms, records a single
-  render pass with a `depth24plus` depth attachment, and submits it.
+  render pass with a `depth24plus` depth attachment, and submits it. With
+  the default `antialias: true`, the pass draws into 4x multisampled
+  color/depth targets and resolves to the swap chain — the sample count is
+  baked into every cached pipeline.
 
 ## Tests
 
@@ -298,5 +303,5 @@ mock: the value of a renderer is what it puts on screen).
   shader uses the instance matrix directly instead of its inverse
   transpose).
 
-Natural next steps if you want to grow it: point lights, MSAA, a
+Natural next steps if you want to grow it: point lights, a
 wireframe/grid helper, and shadow mapping.
