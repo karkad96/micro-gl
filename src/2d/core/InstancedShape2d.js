@@ -1,11 +1,8 @@
 import { Shape2d } from './Shape2d.js';
 import { srgbToLinear } from '../../math/color.js';
+import { INSTANCE_SIZE_2D } from '../constants.js';
 
-/**
- * Floats per instance: a mat3 in the padded column layout Mat3 uses
- * (12) followed by an rgba color (4).
- */
-export const INSTANCE_SIZE_2D = 16;
+export { INSTANCE_SIZE_2D } from '../constants.js';
 
 /**
  * A Shape2d drawn `count` times in one draw call — the 2D counterpart
@@ -36,8 +33,20 @@ export class InstancedShape2d extends Shape2d {
       this.instanceData[base + 10] = 1;
       this.instanceData.fill(1, base + 12, base + 16);
     }
-    /** True when instanceData has changes the renderer hasn't uploaded yet. */
-    this.needsUpdate = true;
+    // Resource caches compare revisions so every renderer/device receives
+    // an edit, even after another renderer has cleared needsUpdate.
+    this._instanceRevision = 0;
+    this._needsUpdate = true;
+  }
+
+  /** Upload hint; set true after changing `instanceData` directly. */
+  get needsUpdate() {
+    return this._needsUpdate;
+  }
+
+  set needsUpdate(value) {
+    this._needsUpdate = Boolean(value);
+    if (this._needsUpdate) this._instanceRevision++;
   }
 
   /** Copies a Mat3 into instance `index`'s transform. */

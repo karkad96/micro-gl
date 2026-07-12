@@ -55,5 +55,12 @@ export class Camera extends Object3d {
       this.projectionMatrix,
       this.viewMatrix,
     );
+
+    // The scene graph was updated before the camera replaced its TRS world
+    // matrix with the look-at orientation. Refresh camera-mounted objects so
+    // they inherit the final camera basis (for example, a HUD or headlight).
+    for (const child of this.children) {
+      child.updateWorldMatrix();
+    }
   }
 }

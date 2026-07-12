@@ -1,14 +1,20 @@
 import { generateMipmaps, mipLevelCount } from './generateMipmaps.js';
 
+const SRGB_TEXTURE_FORMAT = 'rgba8unorm-srgb';
+const LINEAR_TEXTURE_FORMAT = 'rgba8unorm';
+
 /**
  * GPU texture, view and sampler for a Texture, uploaded on first use
- * and cached on `texture._gpu`. Shared by GpuResources and
+ * and cached per GPUDevice on `texture._gpu`. Shared by GpuResources and
  * GpuResources2d — texture upload is device-level plumbing, identical
- * for both engines (which is also why one Texture can be shared by
- * renderers that share a device).
+ * for both engines. A Texture can therefore be used by renderers on the
+ * same device or on independent devices.
  */
 export function uploadTexture(device, texture) {
-  if (!texture._gpu) {
+  const cache = texture._gpu || (texture._gpu = new Map());
+  let gpu = cache.get(device);
+
+  if (!gpu) {
     const size = [texture.width, texture.height];
     const levels = texture.mipmaps
       ? mipLevelCount(texture.width, texture.height)
@@ -16,7 +22,7 @@ export function uploadTexture(device, texture) {
     // An sRGB format makes the GPU decode samples to linear (and
     // re-encode when the mipmap pass renders into a level), so shading
     // and mip filtering happen in linear space.
-    const format = texture.srgb ? 'rgba8unorm-srgb' : 'rgba8unorm';
+    const format = texture.srgb ? SRGB_TEXTURE_FORMAT : LINEAR_TEXTURE_FORMAT;
     const gpuTexture = device.createTexture({
       size,
       mipLevelCount: levels,
@@ -40,11 +46,12 @@ export function uploadTexture(device, texture) {
       addressModeU: texture.addressModeU,
       addressModeV: texture.addressModeV,
     });
-    texture._gpu = {
+    gpu = {
       texture: gpuTexture,
       view: gpuTexture.createView(),
       sampler,
     };
+    cache.set(device, gpu);
   }
-  return texture._gpu;
+  return gpu;
 }

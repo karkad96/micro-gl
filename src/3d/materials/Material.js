@@ -1,23 +1,36 @@
+import {
+  DEFAULT_CULL_MODE_3D,
+  DEFAULT_FRONT_FACE,
+  DEFAULT_PRIMITIVE_TOPOLOGY,
+} from '../../core/pipelineConstants.js';
+import { MAX_POINT_LIGHTS } from '../constants.js';
+import {
+  INSTANCED_MESH_SHADER_PREFIX,
+  MESH_SHADER_PREFIX,
+} from '../shaders/vertexStages.js';
+
 /**
- * Base class for materials. A material is essentially a WGSL shader plus
- * per-object parameters (a color and optionally a texture map) and the
- * fixed-function pipeline state used to draw with it (topology, culling,
- * winding, transparency).
+ * Base class for materials. A material owns per-object parameters and
+ * fixed-function pipeline state; reusable WGSL stages live in `3d/shaders`.
  *
  * Every shader shares the same uniform interface:
  *   @group(0) — per-frame data (camera + lights), owned by the renderer
  *   @group(1) — per-object data (transforms + color)
- * The renderer compiles one render pipeline per material class and
- * pipeline-state combination and caches it, so many meshes can share
- * the same shader.
+ * The renderer caches pipelines by composed WGSL source and pipeline state,
+ * so materials with the same shader share one pipeline while custom material
+ * instances may still provide different fragment stages safely.
  */
 export class Material {
   /**
    * @param {object} [options]
    * @param {number[]} [options.color]    [r, g, b] in 0..1
-   * @param {Texture}  [options.map]      texture the shader can sample at
-   *   the mesh's uvs — only used by materials whose fragment shader
-   *   samples it (see TextureMaterial)
+   * @param {Texture}  [options.map] texture the shader can sample at the
+   *   mesh's uvs — only used when `usesMap` is true
+   * @param {boolean} [options.usesMap] whether the fragment shader declares
+   *   the map and sampler bindings. It defaults to whether `map` was supplied
+   *   for compatibility; custom material subclasses should set it explicitly.
+   *   It is fixed for the material's lifetime so replacing or clearing `map`
+   *   cannot silently change its pipeline layout
    * @param {GPUPrimitiveTopology} [options.topology]
    *   'triangle-list' (default), 'triangle-strip', 'line-list',
    *   'line-strip' or 'point-list'
@@ -32,181 +45,42 @@ export class Material {
   constructor({
     color = [1, 1, 1],
     map = null,
-    topology = 'triangle-list',
-    cullMode = 'back',
-    frontFace = 'ccw',
+    usesMap = map !== null,
+    topology = DEFAULT_PRIMITIVE_TOPOLOGY,
+    cullMode = DEFAULT_CULL_MODE_3D,
+    frontFace = DEFAULT_FRONT_FACE,
     transparent = false,
   } = {}) {
     this.color = color;
     this.map = map;
+    Object.defineProperty(this, 'usesMap', {
+      value: Boolean(usesMap),
+      enumerable: true,
+    });
     this.topology = topology;
     this.cullMode = cullMode;
     this.frontFace = frontFace;
     this.transparent = transparent;
   }
 
-  /** Full WGSL source with `vs` and `fs` entry points. Subclasses provide the fragment stage. */
+  /** Full WGSL source with `vs` and `fs` entry points. */
   get shaderCode() {
     return Material.SHARED_WGSL + this.fragmentShader;
   }
 
-  /** Like shaderCode, but the vertex stage reads per-instance data (see InstancedMesh). */
+  /** Full WGSL source whose vertex stage reads per-instance data. */
   get instancedShaderCode() {
     return Material.INSTANCED_WGSL + this.fragmentShader;
   }
 
+  /** Fragment-stage WGSL supplied by a concrete material. */
   get fragmentShader() {
     throw new Error('Material subclasses must implement fragmentShader');
   }
+
+  // Mutable for compatibility with code that customized these fields directly.
+  static SHARED_WGSL = MESH_SHADER_PREFIX;
+  static INSTANCED_WGSL = INSTANCED_MESH_SHADER_PREFIX;
 }
 
-/**
- * The most point lights one frame can carry — the WGSL array below is
- * fixed-size, so this is baked into every shader. The renderer uses
- * the first MAX_POINT_LIGHTS visible PointLights it finds.
- */
-export const MAX_POINT_LIGHTS = 4;
-
-/**
- * Uniform structs shared by both vertex stages. Field offsets must
- * match what Renderer writes into the uniform buffers.
- */
-const STRUCTS_WGSL = /* wgsl */ `
-struct PointLightUniform {
-  position: vec3f, // world space
-  color: vec3f,    // linear, premultiplied by intensity
-};
-
-struct FrameUniforms {
-  viewProjection: mat4x4f,
-  lightDirection: vec3f,
-  lightColor: vec3f,
-  ambientColor: vec3f,
-  // Packs into ambientColor's 16-byte slot; how many array entries are live.
-  pointLightCount: f32,
-  pointLights: array<PointLightUniform, ${MAX_POINT_LIGHTS}>,
-};
-
-struct ObjectUniforms {
-  model: mat4x4f,
-  normalMatrix: mat4x4f,
-  color: vec4f,
-};
-
-@group(0) @binding(0) var<uniform> uFrame: FrameUniforms;
-@group(1) @binding(0) var<uniform> uObject: ObjectUniforms;
-
-struct VertexIn {
-  @location(0) position: vec3f,
-  @location(1) normal: vec3f,
-  @location(2) uv: vec2f,
-};
-
-// Shading happens in linear space (colors are decoded by the renderer,
-// texture samples by their '-srgb' format); this encodes the finished
-// color for the non-sRGB swap chain. Fragment shaders end with it.
-fn linearToSrgb(c: vec3f) -> vec3f {
-  let lo = c * 12.92;
-  let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - 0.055;
-  return select(hi, lo, c <= vec3f(0.0031308));
-}
-
-// Ambient + the directional light + the point lights on a diffuse
-// surface, in linear space. Lit fragment shaders multiply the surface
-// color by this.
-fn diffuseLighting(n: vec3f, worldPosition: vec3f) -> vec3f {
-  var lighting = uFrame.ambientColor;
-  let toLight = normalize(-uFrame.lightDirection);
-  lighting += max(dot(n, toLight), 0.0) * uFrame.lightColor;
-  let count = u32(uFrame.pointLightCount);
-  for (var i = 0u; i < count; i++) {
-    let offset = uFrame.pointLights[i].position - worldPosition;
-    let distanceSq = max(dot(offset, offset), 1e-6);
-    // 1 / (1 + d^2) falloff: intensity is the brightness right at the
-    // light, fading smoothly and never blowing up at zero distance.
-    let attenuation = 1.0 / (1.0 + distanceSq);
-    let direction = offset * inverseSqrt(distanceSq);
-    lighting += max(dot(n, direction), 0.0) * attenuation
-      * uFrame.pointLights[i].color;
-  }
-  return lighting;
-}
-`;
-
-/**
- * The vertex stage shared by all materials. `objectColor` is how
- * fragment shaders read the surface color — each vertex-stage variant
- * defines it, so the same fragment code works instanced and not.
- */
-Material.SHARED_WGSL =
-  STRUCTS_WGSL +
-  /* wgsl */ `
-struct VertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) worldNormal: vec3f,
-  @location(1) uv: vec2f,
-  @location(2) worldPosition: vec3f,
-};
-
-@vertex
-fn vs(input: VertexIn) -> VertexOut {
-  var out: VertexOut;
-  let worldPosition = uObject.model * vec4f(input.position, 1.0);
-  out.position = uFrame.viewProjection * worldPosition;
-  out.worldNormal = (uObject.normalMatrix * vec4f(input.normal, 0.0)).xyz;
-  out.uv = input.uv;
-  out.worldPosition = worldPosition.xyz;
-  return out;
-}
-
-fn objectColor(input: VertexOut) -> vec4f {
-  return uObject.color;
-}
-`;
-
-/**
- * The instanced vertex stage: each instance carries a model matrix and
- * a color in an instance-step vertex buffer (see InstancedMesh; the
- * buffer layout lives in Pipelines). Both compose with the mesh's
- * own transform and material color, so an InstancedMesh still moves
- * with the scene graph and tints like any mesh.
- */
-Material.INSTANCED_WGSL =
-  STRUCTS_WGSL +
-  /* wgsl */ `
-struct InstanceIn {
-  @location(3) im0: vec4f,
-  @location(4) im1: vec4f,
-  @location(5) im2: vec4f,
-  @location(6) im3: vec4f,
-  @location(7) color: vec4f,
-};
-
-struct VertexOut {
-  @builtin(position) position: vec4f,
-  @location(0) worldNormal: vec3f,
-  @location(1) uv: vec2f,
-  @location(2) color: vec4f,
-  @location(3) worldPosition: vec3f,
-};
-
-@vertex
-fn vs(input: VertexIn, instance: InstanceIn) -> VertexOut {
-  var out: VertexOut;
-  let instanceMatrix = mat4x4f(instance.im0, instance.im1, instance.im2, instance.im3);
-  let worldPosition = uObject.model * instanceMatrix * vec4f(input.position, 1.0);
-  out.position = uFrame.viewProjection * worldPosition;
-  // The instance matrix's upper 3x3 handles rotation + uniform scale
-  // (lighting normalizes); per-instance non-uniform scale skews normals.
-  let rotation = mat3x3f(instance.im0.xyz, instance.im1.xyz, instance.im2.xyz);
-  out.worldNormal = (uObject.normalMatrix * vec4f(rotation * input.normal, 0.0)).xyz;
-  out.uv = input.uv;
-  out.color = instance.color;
-  out.worldPosition = worldPosition.xyz;
-  return out;
-}
-
-fn objectColor(input: VertexOut) -> vec4f {
-  return input.color * uObject.color;
-}
-`;
+export { MAX_POINT_LIGHTS };

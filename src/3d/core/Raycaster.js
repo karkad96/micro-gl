@@ -6,6 +6,16 @@ const _invVP = new Mat4();
 const _invWorld = new Mat4();
 const _localOrigin = new Vec3();
 const _localEnd = new Vec3();
+const _farPoint = new Vec3();
+
+const DIRECTION_EPSILON = 1e-12;
+
+function isVisibleInHierarchy(object) {
+  for (let current = object; current; current = current.parent) {
+    if (!current.visible) return false;
+  }
+  return true;
+}
 
 /**
  * Casts a ray from the camera through a screen point and finds which
@@ -20,6 +30,19 @@ export class Raycaster {
   constructor() {
     this.origin = new Vec3();
     this.direction = new Vec3();
+    /** Farthest distance accepted by intersectObjects(). */
+    this.maxDistance = Infinity;
+  }
+
+  /**
+   * Configures a world-space ray directly. `direction` may have any non-zero
+   * length; intersections normalize it without changing the public vector.
+   */
+  set(origin, direction, maxDistance = Infinity) {
+    this.origin.copy(origin);
+    this.direction.copy(direction);
+    this.maxDistance = maxDistance;
+    return this;
   }
 
   /**
@@ -29,10 +52,29 @@ export class Raycaster {
    * @param {number} ndcY pointer y in normalized device coords (-1..1)
    */
   setFromCamera(ndcX, ndcY, camera) {
-    _invVP.copy(camera.viewProjectionMatrix).invert();
+    if (!_invVP.copy(camera.viewProjectionMatrix).tryInvert()) {
+      this.origin.set(0, 0, 0);
+      this.direction.set(0, 0, 0);
+      this.maxDistance = 0;
+      return this;
+    }
+
     this.origin.set(ndcX, ndcY, 0).applyMat4(_invVP);
-    this.direction.set(ndcX, ndcY, 1).applyMat4(_invVP);
-    this.direction.sub(this.origin).normalize();
+    _farPoint.set(ndcX, ndcY, 1).applyMat4(_invVP);
+    this.direction.copy(_farPoint).sub(this.origin);
+    this.maxDistance = this.direction.length();
+    const valid =
+      Number.isFinite(this.origin.x) &&
+      Number.isFinite(this.origin.y) &&
+      Number.isFinite(this.origin.z) &&
+      Number.isFinite(this.maxDistance) &&
+      this.maxDistance > DIRECTION_EPSILON;
+    if (valid) {
+      this.direction.multiplyScalar(1 / this.maxDistance);
+    } else {
+      this.direction.set(0, 0, 0);
+      this.maxDistance = 0;
+    }
     return this;
   }
 
@@ -43,6 +85,9 @@ export class Raycaster {
   intersectObjects(objects) {
     const hits = [];
     for (const root of objects) {
+      // Callers commonly pass pickable children directly, so account for
+      // invisible ancestors outside the traversed subtree as well.
+      if (!isVisibleInHierarchy(root)) continue;
       root.traverseVisible((object) => {
         if (object instanceof Mesh && object.geometry) {
           const hit = this._intersectMesh(object);
@@ -55,13 +100,49 @@ export class Raycaster {
   }
 
   _intersectMesh(mesh) {
+    const directionLength = this.direction.length();
+    const validMaxDistance =
+      this.maxDistance === Infinity ||
+      (Number.isFinite(this.maxDistance) && this.maxDistance >= 0);
+    if (
+      !Number.isFinite(this.origin.x) ||
+      !Number.isFinite(this.origin.y) ||
+      !Number.isFinite(this.origin.z) ||
+      !Number.isFinite(directionLength) ||
+      directionLength <= DIRECTION_EPSILON ||
+      !validMaxDistance ||
+      !_invWorld.copy(mesh.worldMatrix).tryInvert()
+    ) {
+      return null;
+    }
+
+    const directionX = this.direction.x / directionLength;
+    const directionY = this.direction.y / directionLength;
+    const directionZ = this.direction.z / directionLength;
+
     // Transform the ray into the mesh's local space, where the bounding
     // box is axis-aligned. The local direction is left unnormalized so
     // `t` stays consistent between the two spaces.
-    _invWorld.copy(mesh.worldMatrix).invert();
     _localOrigin.copy(this.origin).applyMat4(_invWorld);
-    _localEnd.copy(this.origin).add(this.direction).applyMat4(_invWorld);
+    _localEnd
+      .set(
+        this.origin.x + directionX,
+        this.origin.y + directionY,
+        this.origin.z + directionZ,
+      )
+      .applyMat4(_invWorld);
     const dir = _localEnd.sub(_localOrigin);
+
+    if (
+      !Number.isFinite(_localOrigin.x) ||
+      !Number.isFinite(_localOrigin.y) ||
+      !Number.isFinite(_localOrigin.z) ||
+      !Number.isFinite(dir.x) ||
+      !Number.isFinite(dir.y) ||
+      !Number.isFinite(dir.z)
+    ) {
+      return null;
+    }
 
     const { min, max } = mesh.geometry.bounds;
     const o = [_localOrigin.x, _localOrigin.y, _localOrigin.z];
@@ -70,13 +151,13 @@ export class Raycaster {
     // Slab test against the local AABB.
     let tMin = -Infinity;
     let tMax = Infinity;
-    for (let a = 0; a < 3; a++) {
-      if (Math.abs(d[a]) < 1e-12) {
-        if (o[a] < min[a] || o[a] > max[a]) return null;
+    for (let axis = 0; axis < min.length; axis++) {
+      if (Math.abs(d[axis]) < DIRECTION_EPSILON) {
+        if (o[axis] < min[axis] || o[axis] > max[axis]) return null;
         continue;
       }
-      let t1 = (min[a] - o[a]) / d[a];
-      let t2 = (max[a] - o[a]) / d[a];
+      let t1 = (min[axis] - o[axis]) / d[axis];
+      let t2 = (max[axis] - o[axis]) / d[axis];
       if (t1 > t2) [t1, t2] = [t2, t1];
       if (t1 > tMin) tMin = t1;
       if (t2 < tMax) tMax = t2;
@@ -84,13 +165,18 @@ export class Raycaster {
     }
     if (tMax < 0) return null; // box is entirely behind the ray
 
+    // When the near-plane origin starts inside the box, use the exit face.
+    // Returning zero would put drag planes on the camera's near plane rather
+    // than at the visible surface of an enclosing object.
     const t = tMin >= 0 ? tMin : tMax;
+    if (t > this.maxDistance) return null;
     const point = new Vec3(
-      this.origin.x + this.direction.x * t,
-      this.origin.y + this.direction.y * t,
-      this.origin.z + this.direction.z * t,
+      this.origin.x + directionX * t,
+      this.origin.y + directionY * t,
+      this.origin.z + directionZ * t,
     );
-    // `direction` is normalized, so t is already the world-space distance.
+    // The local calculation used a normalized world direction, so `t` is a
+    // world-space distance even when callers supplied a scaled direction.
     return { object: mesh, point, distance: t };
   }
 }

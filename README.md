@@ -48,10 +48,15 @@ src/
   core/               shared WebGPU plumbing
     initWebGpu.js     adapter/device/canvas setup (one device per canvas —
                       renderers on the same canvas share it)
+    deviceLease.js    shared-renderer lifetime/ownership coordination
+    objectGpuResources.js manager-local object-buffer disposal
+    rendererConfig.js drawing-buffer, MSAA and attachment constants
+    pipelineConstants.js shader bindings and shared pipeline-state names
+    materialResources.js validates each material's resource contract
+    createMaterialPipelineLayouts.js shared 2D/3D bind-group layouts
     Texture.js        an image + sampler settings; assign to a material's
-                      `map` (uploaded lazily, shareable across engines)
-    uploadTexture.js  creates + caches the GPU texture/view/sampler for a
-                      Texture (shared by both engines' GpuResources)
+                      `map` (uploaded lazily, shareable across devices)
+    uploadTexture.js  caches one GPU texture/view/sampler per device
     generateMipmaps.js fills a texture's mip chain with a tiny render
                       pass per level (WebGPU has no built-in way)
     PointerControls.js the pointer/wheel/touch gesture plumbing shared by
@@ -60,6 +65,7 @@ src/
                       pinch zoom
 
   3d/                 the 3D engine
+    constants.js      limits shared by CPU layouts and WGSL
     core/
       Object3d.js     scene-graph node: transform + children
       Scene.js        scene root, holds the background color
@@ -68,9 +74,10 @@ src/
                       with its own transform + color
       Raycaster.js    pointer picking via ray vs. bounding-box tests
       Renderer.js     swap chain, depth buffer, render pass
-      Pipelines.js    bind group layouts + one cached render pipeline per
-                      material class and pipeline state
+      Pipelines.js    bind group layouts + pipelines cached by composed
+                      shader source and fixed-function state
       GpuResources.js lazy caches: vertex/index/uniform buffers, bind groups
+      Uniforms.js     named CPU/WGSL layouts + 3D frame-uniform writer
     cameras/
       Camera.js       shared base: lookAt target + view/projection matrices
       PerspectiveCamera.js
@@ -87,8 +94,13 @@ src/
       PlaneGeometry.js  XZ ground plane facing +Y
       WireframeGeometry.js  the unique edges of any triangle geometry,
                       for drawing with a line-list material
+    shaders/
+      shared.js       uniform structs, lighting and color-space helpers
+      vertexStages.js regular + instanced vertex stages
+      fragments.js    reusable material fragment stages
+      vertexLayout.js matching GPU vertex attribute descriptors
     materials/
-      Material.js     base class + shared WGSL vertex shader and uniform structs
+      Material.js     material options + shader-stage composition
       BasicMaterial.js  unlit flat color
       LambertMaterial.js diffuse shading from a DirectionalLight + ambient
       TextureMaterial.js LambertMaterial with a texture `map` for the
@@ -103,6 +115,7 @@ src/
                       reference while building a scene
 
   2d/                 the 2D engine — flat counterparts of the 3D classes
+    constants.js      shared instance-layout size
     core/
       Object2d.js     scene-graph node: Vec2 position, one rotation angle,
                       zIndex draw order
@@ -112,6 +125,7 @@ src/
       Renderer2d.js   no depth buffer: zIndex sorting + alpha blending
       Pipelines2d.js  the 2D pipeline cache (alpha blending, no depth)
       GpuResources2d.js lazy caches for the 2D buffers and bind groups
+      Uniforms2d.js   named padded Mat3/object uniform layouts
     cameras/
       Camera2d.js     pan/zoom/rotation as a single Mat3, no perspective
     controls/
@@ -123,12 +137,14 @@ src/
                       containsPoint for raycaster-free picking
       RectGeometry.js
       CircleGeometry.js
+    shaders/          2D uniform chunks, vertex stages, fragments and
+                      matching GPU vertex layouts
     materials/
-      Material2d.js   base class + shared WGSL vertex shader and uniform structs
+      Material2d.js   material options + shader-stage composition
       BasicMaterial2d.js  flat color, alpha-blended
       SpriteMaterial2d.js texture `map` times color — the 2D sprite
 
-test/                 unit tests for the math and scene-graph classes
+test/                 unit/regression tests plus small GPU-device fakes
                       (Node's built-in test runner, no dependencies)
 ```
 
@@ -250,24 +266,49 @@ alpha blending on.
   error explains how to recover. Construct with
   `new Renderer(canvas, { autoResize: true })` to have `setSize` follow the
   canvas's CSS size automatically, and call `renderer.dispose()` when done
-  with it to release what it owns.
-- **Uniforms** are split into two bind groups, matching the WGSL in
-  `Material.js`:
+  with it to release what it owns. Renderers initialized through
+  `renderer2d.init(renderer3d)` share a managed device lease: disposing the
+  original transfers ownership, and the last live renderer destroys the
+  device. Each renderer also refreshes stale attachments if its shared canvas
+  was resized by the other one. Sharing is intended for alternating 2D/3D
+  scenes; each `render()` starts with a clear, so it is not an overlay/compositor
+  API.
+- **Uniforms** are split into two bind groups, matching the declarations in
+  `3d/shaders/shared.js` (and its 2D counterpart):
   - `@group(0)` _frame_ uniforms — view-projection matrix, light direction/color,
     ambient color, and up to `MAX_POINT_LIGHTS` (4) point lights (world
     position + color). Written once per frame.
   - `@group(1)` _object_ uniforms — model matrix, normal matrix, color. Each
     mesh gets its own small uniform buffer and bind group (created lazily on
-    first draw). Materials with a `map` use a second layout that adds the
-    texture view and sampler to the same group.
-- **Pipelines** are compiled once per material class + pipeline state
+    first draw). Materials that declare `usesMap: true` use a second layout
+    that adds the texture view and sampler to the same group. This declaration
+    is independent of the current `map` value, so swapping a resource cannot
+    accidentally change the shader's pipeline layout. Custom material classes
+    should pass it explicitly; when omitted, it is inferred once from the
+    initial `map` for compatibility.
+- **Pipelines** are compiled once per composed shader + pipeline state
   (primitive topology, culling, textured / instanced / transparent or
-  not) and cached, so any number of meshes sharing a material class reuse
-  the same `GPURenderPipeline`. Transparent variants alpha-blend and
+  not) and cached, so materials producing the same WGSL reuse the same
+  `GPURenderPipeline`. Transparent variants alpha-blend and
   don't write the depth buffer.
+- **Shaders** are ordinary JavaScript ES modules under each
+  engine's `shaders/` directory. Shared declarations, vertex stages, fragment
+  stages and their matching vertex layouts are separate, while material
+  classes only hold options and select a fragment stage. This keeps WGSL out
+  of the public-facing classes without requiring raw-file imports or a build
+  tool.
+- **Resources** are scoped to their real WebGPU owner. Geometry buffers and
+  textures are cached per `GPUDevice`; object uniform buffers and bind groups
+  are cached per renderer resource manager because their layouts belong to
+  that manager. Disposing a renderer removes only its entries and buffers;
+  other renderers' entries remain valid. The same scene data can therefore be
+  rendered on independent canvases/devices.
 - **Geometries** upload one interleaved vertex buffer (position, normal, uv —
-  32-byte stride) and one 32-bit index buffer, lazily on first draw.
-- **Textures** upload once with a full mip chain (generated level by level
+  32-byte stride) and one 32-bit index buffer per device, lazily on first draw.
+  Edit `vertices`/`indices` in place and set `geometry.needsUpdate = true`; a
+  revision counter ensures every device receives the edit (the arrays must
+  keep their length).
+- **Textures** upload per device with a full mip chain (generated level by level
   with a tiny render pass — `generateMipmaps.js`) and get a sampler from
   the Texture's settings. Image textures upload as `rgba8unorm-srgb`, so
   sampling and mip filtering happen in linear space.
@@ -276,12 +317,11 @@ alpha blending on.
   (`srgbToLinear`), all shading happens in linear space, and every
   fragment shader encodes the result back to sRGB at the end — unlit
   colors round-trip exactly, lit and textured surfaces shade correctly.
-- **Geometries** are uploaded once and cached; edit `vertices`/`indices`
-  in place and set `geometry.needsUpdate = true` to re-upload (the
-  arrays must keep their length).
 - **Instancing**: an `InstancedMesh` packs per-instance transform + color
   into a second, instance-stepped vertex buffer and draws all instances
   with one `drawIndexed` — thousands of objects for a couple of draw calls.
+  Instance revisions keep every renderer synchronized and guarantee that a
+  buffer recreated after `dispose()` is populated before drawing.
 - **render()** updates world matrices, writes the uniforms, records a single
   render pass with a `depth24plus` depth attachment, and submits it. With
   the default `antialias: true`, the pass draws into 4x multisampled
@@ -290,15 +330,16 @@ alpha blending on.
 
 ## Tests
 
-The math and scene-graph classes are covered by unit tests built on
-Node's built-in test runner — no dependencies:
+Math, scene graphs, controls, resource lifecycles, shader composition and
+pipeline descriptors are covered with Node's built-in test runner and small
+fakes — no dependencies:
 
 ```
 npm test
 ```
 
-Everything GPU-side is verified by running the demo (there is nothing to
-mock: the value of a renderer is what it puts on screen).
+Shader composition and pipeline descriptors are unit-tested with small device
+fakes. Final GPU behavior is verified by running the demo in a WebGPU browser.
 
 ## Deliberate limitations (it's _micro_)
 

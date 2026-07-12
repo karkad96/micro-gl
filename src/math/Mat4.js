@@ -203,38 +203,39 @@ export class Mat4 {
     let zy = eye.y - target.y;
     let zz = eye.z - target.z;
     let len = Math.hypot(zx, zy, zz);
-    if (len > 0) {
+    if (len > BASIS_EPSILON) {
       zx /= len;
       zy /= len;
       zz /= len;
+    } else {
+      // Eye and target coincide, so retain a valid, neutral orientation.
+      zx = 0;
+      zy = 0;
+      zz = 1;
     }
 
     let xx = up.y * zz - up.z * zy;
     let xy = up.z * zx - up.x * zz;
     let xz = up.x * zy - up.y * zx;
     len = Math.hypot(xx, xy, xz);
-    if (len === 0) {
-      // View direction is parallel to `up` (e.g. a straight top-down
-      // camera): nudge it sideways so the cross product is defined.
-      if (Math.abs(up.z) === 1) {
-        zx += 1e-4;
+    if (len <= BASIS_EPSILON) {
+      // `up` is parallel to the view direction (its magnitude is irrelevant).
+      // Pick a stable temporary up axis without changing the direction in
+      // which the camera is looking.
+      if (Math.abs(zy) < NEAR_VERTICAL_AXIS) {
+        xx = zz;
+        xy = 0;
+        xz = -zx;
       } else {
-        zz += 1e-4;
+        xx = -zy;
+        xy = zx;
+        xz = 0;
       }
-      len = Math.hypot(zx, zy, zz);
-      zx /= len;
-      zy /= len;
-      zz /= len;
-      xx = up.y * zz - up.z * zy;
-      xy = up.z * zx - up.x * zz;
-      xz = up.x * zy - up.y * zx;
       len = Math.hypot(xx, xy, xz);
     }
-    if (len > 0) {
-      xx /= len;
-      xy /= len;
-      xz /= len;
-    }
+    xx /= len;
+    xy /= len;
+    xz /= len;
 
     const yx = zy * xz - zz * xy;
     const yy = zz * xx - zx * xz;
@@ -260,7 +261,19 @@ export class Mat4 {
     return this;
   }
 
+  /** Inverts this matrix, throwing when no inverse exists. */
   invert() {
+    if (!this.tryInvert()) {
+      throw new RangeError('Cannot invert a singular Mat4');
+    }
+    return this;
+  }
+
+  /**
+   * Attempts to invert this matrix without changing it when it is singular.
+   * Returns whether the inverse was written.
+   */
+  tryInvert() {
     const e = this.elements;
     const a00 = e[0],
       a01 = e[1],
@@ -294,7 +307,7 @@ export class Mat4 {
 
     let det =
       b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-    if (det === 0) return this.identity();
+    if (det === 0 || !Number.isFinite(det)) return false;
     det = 1 / det;
 
     e[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
@@ -313,7 +326,7 @@ export class Mat4 {
     e[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
     e[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
     e[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
-    return this;
+    return true;
   }
 
   transpose() {
@@ -341,4 +354,6 @@ export class Mat4 {
   }
 }
 
+const BASIS_EPSILON = 1e-12;
+const NEAR_VERTICAL_AXIS = 1 - 1e-6;
 const _tmp = new Mat4();

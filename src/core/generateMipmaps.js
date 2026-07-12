@@ -3,6 +3,14 @@
 // fullscreen triangle sampling the previous level with linear
 // filtering. The pipeline is created once per device and cached.
 
+import { SHADER_ENTRY_POINT } from './pipelineConstants.js';
+
+const MIPMAP_BIND_GROUP = 0;
+const MIPMAP_BINDING = Object.freeze({
+  source: 0,
+  sampler: 1,
+});
+
 const MIPMAP_WGSL = /* wgsl */ `
 struct VertexOut {
   @builtin(position) position: vec4f,
@@ -20,8 +28,10 @@ fn vs(@builtin(vertex_index) index: u32) -> VertexOut {
   return out;
 }
 
-@group(0) @binding(0) var src: texture_2d<f32>;
-@group(0) @binding(1) var srcSampler: sampler;
+@group(${MIPMAP_BIND_GROUP}) @binding(${MIPMAP_BINDING.source})
+var src: texture_2d<f32>;
+@group(${MIPMAP_BIND_GROUP}) @binding(${MIPMAP_BINDING.sampler})
+var srcSampler: sampler;
 
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
@@ -59,10 +69,13 @@ export function generateMipmaps(device, texture, levels, format) {
   if (!pipeline) {
     pipeline = device.createRenderPipeline({
       layout: 'auto',
-      vertex: { module: generator.module, entryPoint: 'vs' },
+      vertex: {
+        module: generator.module,
+        entryPoint: SHADER_ENTRY_POINT.vertex,
+      },
       fragment: {
         module: generator.module,
-        entryPoint: 'fs',
+        entryPoint: SHADER_ENTRY_POINT.fragment,
         targets: [{ format }],
       },
     });
@@ -75,13 +88,13 @@ export function generateMipmaps(device, texture, levels, format) {
       layout: pipeline.getBindGroupLayout(0),
       entries: [
         {
-          binding: 0,
+          binding: MIPMAP_BINDING.source,
           resource: texture.createView({
             baseMipLevel: level - 1,
             mipLevelCount: 1,
           }),
         },
-        { binding: 1, resource: generator.sampler },
+        { binding: MIPMAP_BINDING.sampler, resource: generator.sampler },
       ],
     });
     const pass = encoder.beginRenderPass({
@@ -94,7 +107,7 @@ export function generateMipmaps(device, texture, levels, format) {
       ],
     });
     pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
+    pass.setBindGroup(MIPMAP_BIND_GROUP, bindGroup);
     pass.draw(3);
     pass.end();
   }

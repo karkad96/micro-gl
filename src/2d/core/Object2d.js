@@ -1,5 +1,6 @@
 import { Vec2 } from '../../math/Vec2.js';
 import { Mat3 } from '../../math/Mat3.js';
+import { disposeObjectGpuResources } from '../../core/objectGpuResources.js';
 
 /**
  * Base class for everything that lives in the 2D scene graph — the flat
@@ -26,7 +27,7 @@ export class Object2d {
 
     this.localMatrix = new Mat3();
     this.worldMatrix = new Mat3();
-    /** Per-object GPU resources, created lazily by the renderer (see GpuResources2d). */
+    /** Renderer-local GPU resources, created lazily (see GpuResources2d). */
     this._gpu = null;
   }
 
@@ -89,19 +90,17 @@ export class Object2d {
   }
 
   /**
-   * Destroys the per-object GPU resources the renderer created for this
-   * object and its descendants (see GpuResources2d), releasing the
-   * memory right away instead of waiting for GC. Geometry buffers are
-   * left alone: geometries may be shared between objects. Drawing a
-   * disposed object again just re-creates its resources.
+   * Destroys the per-object GPU resources created by every renderer for
+   * this object and its descendants (see GpuResources2d), releasing memory
+   * right away instead of waiting for GC. Geometry buffers are left alone:
+   * geometries may be shared between objects. Drawing a disposed object
+   * again re-creates its resources and re-uploads its instance data.
    */
   dispose() {
     this.traverse((object) => {
-      if (object._gpu) {
-        object._gpu.uniformBuffer.destroy();
-        if (object._gpu.instanceBuffer) object._gpu.instanceBuffer.destroy();
-        object._gpu = null;
-      }
+      disposeObjectGpuResources(object);
+      // Re-created instance buffers must receive the CPU-side data before use.
+      if (object.isInstanced) object.needsUpdate = true;
     });
     return this;
   }

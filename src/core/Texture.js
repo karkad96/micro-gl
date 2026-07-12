@@ -2,15 +2,14 @@
  * An image a shader can sample, plus its sampler settings — plain data,
  * like geometries and materials. Assign one to a material's `map` and
  * the renderer uploads it lazily on first draw (see GpuResources /
- * GpuResources2d, which cache the GPU side on `_gpu`).
+ * GpuResources2d, which cache the GPU side per device on `_gpu`).
  *
  * `source` is anything copyExternalImageToTexture accepts: an
  * ImageBitmap, HTMLCanvasElement, OffscreenCanvas or HTMLImageElement.
  * Use `Texture.load(url)` to get one from an image file.
  *
- * The GPU texture belongs to whichever device first draws it, so one
- * Texture can be shared by renderers that share a device (like a 3D and
- * a 2D renderer on the same canvas), but not across devices.
+ * One Texture can be shared by renderers on the same or different
+ * devices. Each device receives its own GPU texture and sampler.
  */
 export class Texture {
   /**
@@ -64,14 +63,13 @@ export class Texture {
   }
 
   /**
-   * Destroys the uploaded GPU texture (if any), releasing its memory
-   * right away instead of waiting for GC. The next draw that samples
-   * this Texture uploads it again, and meshes/shapes using it rebuild
-   * their bind groups automatically.
+   * Destroys every uploaded GPU texture (if any), releasing its memory
+   * right away instead of waiting for GC. The next draw on each device
+   * uploads it again, and meshes/shapes rebuild their bind groups.
    */
   dispose() {
     if (this._gpu) {
-      this._gpu.texture.destroy();
+      for (const { texture } of this._gpu.values()) texture.destroy();
       this._gpu = null;
     }
     return this;

@@ -142,10 +142,15 @@ test('geometry.needsUpdate invalidates the cached bounds', () => {
 test('dispose() destroys per-object GPU buffers and forgets them', () => {
   const object = new Object3d();
   let destroyed = 0;
-  object._gpu = {
-    uniformBuffer: { destroy: () => destroyed++ },
-    instanceBuffer: { destroy: () => destroyed++ },
-  };
+  object._gpu = new Map([
+    [
+      {},
+      {
+        uniformBuffer: { destroy: () => destroyed++ },
+        instanceBuffer: { destroy: () => destroyed++ },
+      },
+    ],
+  ]);
   object.dispose();
   assert.equal(destroyed, 2);
   assert.equal(object._gpu, null);
@@ -155,6 +160,7 @@ test('Renderer.dispose destroys the device only when it owns it', () => {
   const gpuStubs = (destroyed) => ({
     _frameUniformBuffer: { destroy: () => destroyed.push('uniforms') },
     _depthTexture: { destroy: () => destroyed.push('depth') },
+    _resources: { dispose: () => destroyed.push('objects') },
     device: { destroy: () => destroyed.push('device') },
     context: { unconfigure: () => destroyed.push('context') },
   });
@@ -164,7 +170,7 @@ test('Renderer.dispose destroys the device only when it owns it', () => {
   const sharedDestroyed = [];
   Object.assign(shared, gpuStubs(sharedDestroyed), { _ownsDevice: false });
   shared.dispose();
-  assert.deepEqual(sharedDestroyed, ['uniforms', 'depth']);
+  assert.deepEqual(sharedDestroyed, ['uniforms', 'depth', 'objects']);
   assert.equal(shared.device, null);
 
   // Owning the device: release it (and the canvas configuration) too.
@@ -172,7 +178,10 @@ test('Renderer.dispose destroys the device only when it owns it', () => {
   const ownerDestroyed = [];
   Object.assign(owner, gpuStubs(ownerDestroyed), { _ownsDevice: true });
   owner.dispose();
-  assert.deepEqual(ownerDestroyed, ['uniforms', 'depth', 'context', 'device']);
+  assert.deepEqual(
+    ownerDestroyed,
+    ['uniforms', 'depth', 'objects', 'context', 'device'],
+  );
 });
 
 test('BoxGeometry has 24 vertices, 36 indices and exact bounds', () => {

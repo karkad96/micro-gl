@@ -6,6 +6,13 @@ const _pointer = new Vec2();
 const _local = new Vec2();
 const _worldPos = new Vec2();
 
+function isVisibleInHierarchy(object) {
+  for (let current = object; current; current = current.parent) {
+    if (!current.visible) return false;
+  }
+  return true;
+}
+
 /**
  * Lets the user pick shapes with the pointer and drag them around —
  * the 2D counterpart of DragControls, without needing a Raycaster:
@@ -37,55 +44,90 @@ export class DragControls2d {
     this.onDragEnd = null;
 
     this._dragging = false;
+    this._activePointerId = null;
     this._grabOffset = new Vec2(); // shape world position - grab point
 
-    this._onPointerDown = (e) => {
-      // Alt + left button is the rotate-view gesture — leave it alone.
-      if (!this.enabled || e.button !== 0 || e.altKey) return;
-      const point = this._pointerToWorld(e);
-      const hit = this._pick(point);
-      if (hit) {
-        this._select(hit);
-        this._dragging = true;
-        this.domElement.setPointerCapture(e.pointerId);
-
-        const w = hit.worldMatrix.elements;
-        this._grabOffset.set(w[8] - point.x, w[9] - point.y);
-
-        if (this.onDragStart) this.onDragStart(hit);
-      } else {
-        this._select(null);
-      }
-    };
-
-    this._onPointerMove = (e) => {
-      if (!this.enabled || !this._dragging || !this.selected) return;
-      const point = this._pointerToWorld(e);
-
-      // New world position, then into the parent's local space.
-      _worldPos.copy(point).add(this._grabOffset);
-      const parent = this.selected.parent;
-      if (parent) {
-        _inverse.copy(parent.worldMatrix).invert();
-        _worldPos.applyMat3(_inverse);
-      }
-      this.selected.position.copy(_worldPos);
-      if (this.onDrag) this.onDrag(this.selected);
-    };
-
-    this._onPointerUp = (e) => {
-      if (!this._dragging) return;
-      this._dragging = false;
-      if (this.domElement.hasPointerCapture(e.pointerId)) {
-        this.domElement.releasePointerCapture(e.pointerId);
-      }
-      if (this.onDragEnd) this.onDragEnd(this.selected);
-    };
+    this._onPointerDown = this._handlePointerDown.bind(this);
+    this._onPointerMove = this._handlePointerMove.bind(this);
+    this._onPointerUp = this._handlePointerUp.bind(this);
 
     domElement.addEventListener('pointerdown', this._onPointerDown);
     domElement.addEventListener('pointermove', this._onPointerMove);
     domElement.addEventListener('pointerup', this._onPointerUp);
     domElement.addEventListener('pointercancel', this._onPointerUp);
+  }
+
+  _handlePointerDown(event) {
+    const rotateViewGesture = event.button !== 0 || event.altKey;
+    if (
+      !this.enabled ||
+      rotateViewGesture ||
+      this._activePointerId !== null
+    ) {
+      return;
+    }
+
+    const point = this._pointerToWorld(event);
+    if (!point) return;
+    const hit = this._pick(point);
+    if (!hit) {
+      this._select(null);
+      return;
+    }
+
+    this._select(hit);
+    this._dragging = true;
+    this._activePointerId = event.pointerId;
+    this.domElement.setPointerCapture(event.pointerId);
+
+    const worldMatrix = hit.worldMatrix.elements;
+    this._grabOffset.set(
+      worldMatrix[8] - point.x,
+      worldMatrix[9] - point.y,
+    );
+    if (this.onDragStart) this.onDragStart(hit);
+  }
+
+  _handlePointerMove(event) {
+    if (
+      !this.enabled ||
+      !this._dragging ||
+      !this.selected ||
+      event.pointerId !== this._activePointerId
+    ) {
+      return;
+    }
+
+    const point = this._pointerToWorld(event);
+    if (!point) return;
+
+    // New world position, then into the parent's local space.
+    _worldPos.copy(point).add(this._grabOffset);
+    const parent = this.selected.parent;
+    if (parent) {
+      if (!_inverse.copy(parent.worldMatrix).tryInvert()) return;
+      _worldPos.applyMat3(_inverse);
+    }
+    this.selected.position.copy(_worldPos);
+    if (this.onDrag) this.onDrag(this.selected);
+  }
+
+  _handlePointerUp(event) {
+    if (!this._dragging || event.pointerId !== this._activePointerId) return;
+    this._finishDrag();
+  }
+
+  _finishDrag() {
+    const pointerId = this._activePointerId;
+    this._dragging = false;
+    this._activePointerId = null;
+    if (
+      pointerId !== null &&
+      this.domElement.hasPointerCapture(pointerId)
+    ) {
+      this.domElement.releasePointerCapture(pointerId);
+    }
+    if (this.onDragEnd) this.onDragEnd(this.selected);
   }
 
   _select(shape) {
@@ -99,7 +141,9 @@ export class DragControls2d {
     const rect = this.domElement.getBoundingClientRect();
     const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const ndcY = 1 - ((e.clientY - rect.top) / rect.height) * 2;
-    _inverse.copy(this.camera.viewProjectionMatrix).invert();
+    if (!_inverse.copy(this.camera.viewProjectionMatrix).tryInvert()) {
+      return null;
+    }
     return _pointer.set(ndcX, ndcY).applyMat3(_inverse);
   }
 
@@ -111,8 +155,9 @@ export class DragControls2d {
   _pick(point) {
     let hit = null;
     for (const shape of this.objects) {
-      if (!shape.visible) continue;
-      _local.copy(point).applyMat3(_inverse.copy(shape.worldMatrix).invert());
+      if (!isVisibleInHierarchy(shape)) continue;
+      if (!_inverse.copy(shape.worldMatrix).tryInvert()) continue;
+      _local.copy(point).applyMat3(_inverse);
       if (!shape.geometry.containsPoint(_local.x, _local.y)) continue;
       if (!hit || shape.zIndex >= hit.zIndex) hit = shape;
     }
@@ -120,6 +165,7 @@ export class DragControls2d {
   }
 
   dispose() {
+    if (this._dragging) this._finishDrag();
     this.domElement.removeEventListener('pointerdown', this._onPointerDown);
     this.domElement.removeEventListener('pointermove', this._onPointerMove);
     this.domElement.removeEventListener('pointerup', this._onPointerUp);
