@@ -1,4 +1,5 @@
 import { Material2d } from './Material2d.js';
+import { SPRITE_FRAGMENT_SHADER_2D } from '../shaders/fragments.js';
 
 /**
  * Fills the shape with a texture sampled at its uvs, tinted by `color` —
@@ -13,8 +14,8 @@ import { Material2d } from './Material2d.js';
 export class SpriteMaterial2d extends Material2d {
   /** @param {{map: Texture, color?: number[]}} options see Material2d for the rest */
   constructor(options = {}) {
-    super(options);
-    /** Tells the pipeline cache to reject a cleared `map` legibly. */
+    super({ ...options, usesMap: true });
+    // Compatibility alias retained for existing material introspection.
     this.requiresMap = true;
     if (!this.map) {
       throw new Error('SpriteMaterial2d requires a `map` texture');
@@ -22,15 +23,6 @@ export class SpriteMaterial2d extends Material2d {
   }
 
   get fragmentShader() {
-    return /* wgsl */ `
-@group(1) @binding(1) var uMap: texture_2d<f32>;
-@group(1) @binding(2) var uMapSampler: sampler;
-
-@fragment
-fn fs(input: VertexOut) -> @location(0) vec4f {
-  let base = textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
-  return vec4f(linearToSrgb(base.rgb), base.a);
-}
-`;
+    return SPRITE_FRAGMENT_SHADER_2D;
   }
 }

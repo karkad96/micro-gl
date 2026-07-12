@@ -6,8 +6,9 @@
  * so one GPU vertex buffer with a 16-byte stride serves both attributes
  * (half the data of a 3D vertex — no z, no normal).
  *
- * The renderer lazily creates the GPU buffers the first time the
- * geometry is drawn and stores them on `_gpu`.
+ * Renderers lazily create GPU buffers the first time the geometry is
+ * drawn. `_gpu` holds one cache entry per GPUDevice, so the same CPU
+ * geometry can safely be shared by independently initialized renderers.
  */
 export class Geometry2d {
   /**
@@ -22,6 +23,9 @@ export class Geometry2d {
     this._gpu = null;
     this._bounds = null;
     this._needsUpdate = false;
+    // Each cache entry records the revision it last uploaded. A revision
+    // cannot be replaced by one boolean when several devices share this data.
+    this._gpuRevision = 0;
   }
 
   /**
@@ -35,8 +39,11 @@ export class Geometry2d {
   }
 
   set needsUpdate(value) {
-    this._needsUpdate = value;
-    if (value) this._bounds = null;
+    this._needsUpdate = Boolean(value);
+    if (this._needsUpdate) {
+      this._gpuRevision++;
+      this._bounds = null;
+    }
   }
 
   /**
@@ -84,8 +91,10 @@ export class Geometry2d {
    */
   dispose() {
     if (this._gpu) {
-      this._gpu.vertexBuffer.destroy();
-      this._gpu.indexBuffer.destroy();
+      for (const { vertexBuffer, indexBuffer } of this._gpu.values()) {
+        vertexBuffer.destroy();
+        indexBuffer.destroy();
+      }
       this._gpu = null;
     }
     return this;
@@ -95,4 +104,5 @@ export class Geometry2d {
 /** Number of floats per vertex (2 position + 2 uv). */
 export const VERTEX_SIZE_2D = 4;
 /** Byte stride of one vertex in the GPU buffer. */
-export const VERTEX_STRIDE_2D = VERTEX_SIZE_2D * 4;
+export const VERTEX_STRIDE_2D =
+  VERTEX_SIZE_2D * Float32Array.BYTES_PER_ELEMENT;

@@ -1,4 +1,5 @@
 import { Material } from './Material.js';
+import { TEXTURE_FRAGMENT_SHADER } from '../shaders/fragments.js';
 
 /**
  * A diffuse (Lambertian) material that gets its surface color from a
@@ -9,8 +10,8 @@ import { Material } from './Material.js';
 export class TextureMaterial extends Material {
   /** @param {{map: Texture, color?: number[]}} options see Material for the rest */
   constructor(options = {}) {
-    super(options);
-    /** Tells the pipeline cache to reject a cleared `map` legibly. */
+    super({ ...options, usesMap: true });
+    // Compatibility alias retained for existing material introspection.
     this.requiresMap = true;
     if (!this.map) {
       throw new Error('TextureMaterial requires a `map` texture');
@@ -18,16 +19,6 @@ export class TextureMaterial extends Material {
   }
 
   get fragmentShader() {
-    return /* wgsl */ `
-@group(1) @binding(1) var uMap: texture_2d<f32>;
-@group(1) @binding(2) var uMapSampler: sampler;
-
-@fragment
-fn fs(input: VertexOut) -> @location(0) vec4f {
-  let base = textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
-  let lighting = diffuseLighting(normalize(input.worldNormal), input.worldPosition);
-  return vec4f(linearToSrgb(base.rgb * lighting), base.a);
-}
-`;
+    return TEXTURE_FRAGMENT_SHADER;
   }
 }

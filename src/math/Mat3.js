@@ -127,10 +127,21 @@ export class Mat3 {
   }
 
   /**
-   * Inverts the matrix, assuming it is affine (bottom row 0 0 1) —
-   * which holds for every matrix this engine composes.
+   * Inverts the matrix, assuming it is affine (bottom row 0 0 1), and
+   * throws when no inverse exists. Every matrix this engine composes is affine.
    */
   invert() {
+    if (!this.tryInvert()) {
+      throw new RangeError('Cannot invert a singular Mat3');
+    }
+    return this;
+  }
+
+  /**
+   * Attempts to invert this affine matrix without changing it when it is
+   * singular. Returns whether the inverse was written.
+   */
+  tryInvert() {
     const e = this.elements;
     const a = e[0],
       b = e[1],
@@ -140,7 +151,7 @@ export class Mat3 {
       ty = e[9];
 
     let det = a * d - b * c;
-    if (det === 0) return this.identity();
+    if (det === 0 || !Number.isFinite(det)) return false;
     det = 1 / det;
 
     e[0] = d * det;
@@ -149,6 +160,6 @@ export class Mat3 {
     e[5] = a * det;
     e[8] = (c * ty - d * tx) * det;
     e[9] = (b * tx - a * ty) * det;
-    return this;
+    return true;
   }
 }

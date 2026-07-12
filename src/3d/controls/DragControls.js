@@ -4,6 +4,7 @@ import { Mat4 } from '../../math/Mat4.js';
 
 const _parentInverse = new Mat4();
 const _worldPos = new Vec3();
+const PARALLEL_PLANE_EPSILON = 1e-9;
 
 /**
  * Lets the user pick meshes with the pointer and drag them around.
@@ -37,61 +38,88 @@ export class DragControls {
 
     this._raycaster = new Raycaster();
     this._dragging = false;
+    this._activePointerId = null;
     this._grabPoint = new Vec3(); // world point where the object was grabbed
     this._grabOffset = new Vec3(); // object world position - grab point
     this._planeNormal = new Vec3();
 
-    this._onPointerDown = (e) => {
-      // Alt + left button is the orbit gesture — leave it alone.
-      if (!this.enabled || e.button !== 0 || e.altKey) return;
-      const hit = this._pick(e);
-      if (hit) {
-        this._select(hit.object);
-        this._dragging = true;
-        this.domElement.setPointerCapture(e.pointerId);
-
-        // Drag on the camera-facing plane through the grab point.
-        const m = this.camera.worldMatrix.elements;
-        this._planeNormal.set(m[8], m[9], m[10]);
-        this._grabPoint.copy(hit.point);
-        const w = hit.object.worldMatrix.elements;
-        this._grabOffset.set(w[12], w[13], w[14]).sub(hit.point);
-
-        if (this.onDragStart) this.onDragStart(hit.object);
-      } else {
-        this._select(null);
-      }
-    };
-
-    this._onPointerMove = (e) => {
-      if (!this.enabled || !this._dragging || !this.selected) return;
-      const point = this._intersectDragPlane(e);
-      if (!point) return;
-
-      // New world position, then into the parent's local space.
-      _worldPos.copy(point).add(this._grabOffset);
-      const parent = this.selected.parent;
-      if (parent) {
-        _parentInverse.copy(parent.worldMatrix).invert();
-        _worldPos.applyMat4(_parentInverse);
-      }
-      this.selected.position.copy(_worldPos);
-      if (this.onDrag) this.onDrag(this.selected);
-    };
-
-    this._onPointerUp = (e) => {
-      if (!this._dragging) return;
-      this._dragging = false;
-      if (this.domElement.hasPointerCapture(e.pointerId)) {
-        this.domElement.releasePointerCapture(e.pointerId);
-      }
-      if (this.onDragEnd) this.onDragEnd(this.selected);
-    };
+    this._onPointerDown = this._handlePointerDown.bind(this);
+    this._onPointerMove = this._handlePointerMove.bind(this);
+    this._onPointerUp = this._handlePointerUp.bind(this);
 
     domElement.addEventListener('pointerdown', this._onPointerDown);
     domElement.addEventListener('pointermove', this._onPointerMove);
     domElement.addEventListener('pointerup', this._onPointerUp);
     domElement.addEventListener('pointercancel', this._onPointerUp);
+  }
+
+  _handlePointerDown(event) {
+    const orbitGesture = event.button !== 0 || event.altKey;
+    if (!this.enabled || orbitGesture || this._activePointerId !== null) return;
+
+    const hit = this._pick(event);
+    if (!hit) {
+      this._select(null);
+      return;
+    }
+
+    this._select(hit.object);
+    this._dragging = true;
+    this._activePointerId = event.pointerId;
+    this.domElement.setPointerCapture(event.pointerId);
+
+    // Drag on the camera-facing plane through the grab point.
+    const cameraMatrix = this.camera.worldMatrix.elements;
+    this._planeNormal.set(cameraMatrix[8], cameraMatrix[9], cameraMatrix[10]);
+    this._grabPoint.copy(hit.point);
+    const objectMatrix = hit.object.worldMatrix.elements;
+    this._grabOffset
+      .set(objectMatrix[12], objectMatrix[13], objectMatrix[14])
+      .sub(hit.point);
+
+    if (this.onDragStart) this.onDragStart(hit.object);
+  }
+
+  _handlePointerMove(event) {
+    if (
+      !this.enabled ||
+      !this._dragging ||
+      !this.selected ||
+      event.pointerId !== this._activePointerId
+    ) {
+      return;
+    }
+
+    const point = this._intersectDragPlane(event);
+    if (!point) return;
+
+    // New world position, then into the parent's local space.
+    _worldPos.copy(point).add(this._grabOffset);
+    const parent = this.selected.parent;
+    if (parent) {
+      if (!_parentInverse.copy(parent.worldMatrix).tryInvert()) return;
+      _worldPos.applyMat4(_parentInverse);
+    }
+    this.selected.position.copy(_worldPos);
+    if (this.onDrag) this.onDrag(this.selected);
+  }
+
+  _handlePointerUp(event) {
+    if (!this._dragging || event.pointerId !== this._activePointerId) return;
+    this._finishDrag();
+  }
+
+  _finishDrag() {
+    const pointerId = this._activePointerId;
+    this._dragging = false;
+    this._activePointerId = null;
+    if (
+      pointerId !== null &&
+      this.domElement.hasPointerCapture(pointerId)
+    ) {
+      this.domElement.releasePointerCapture(pointerId);
+    }
+    if (this.onDragEnd) this.onDragEnd(this.selected);
   }
 
   _select(mesh) {
@@ -117,7 +145,7 @@ export class DragControls {
     const ray = this._ray(e);
     const n = this._planeNormal;
     const denom = n.dot(ray.direction);
-    if (Math.abs(denom) < 1e-9) return null;
+    if (Math.abs(denom) < PARALLEL_PLANE_EPSILON) return null;
     const t =
       (n.x * (this._grabPoint.x - ray.origin.x) +
         n.y * (this._grabPoint.y - ray.origin.y) +
@@ -131,6 +159,7 @@ export class DragControls {
   }
 
   dispose() {
+    if (this._dragging) this._finishDrag();
     this.domElement.removeEventListener('pointerdown', this._onPointerDown);
     this.domElement.removeEventListener('pointermove', this._onPointerMove);
     this.domElement.removeEventListener('pointerup', this._onPointerUp);

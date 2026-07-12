@@ -5,8 +5,9 @@
  *   position (x, y, z), normal (x, y, z), uv (u, v)
  * so one GPU vertex buffer with a 32-byte stride serves every attribute.
  *
- * The renderer lazily creates the GPU buffers the first time the
- * geometry is drawn and stores them on `_gpu`.
+ * Renderers lazily create GPU buffers the first time the geometry is
+ * drawn. `_gpu` holds one cache entry per GPUDevice, so the same CPU
+ * geometry can safely be shared by independently initialized renderers.
  */
 export class Geometry {
   /**
@@ -21,6 +22,9 @@ export class Geometry {
     this._gpu = null;
     this._bounds = null;
     this._needsUpdate = false;
+    // Each cache entry records the revision it last uploaded. A revision
+    // cannot be replaced by one boolean when several devices share this data.
+    this._gpuRevision = 0;
   }
 
   /**
@@ -34,8 +38,11 @@ export class Geometry {
   }
 
   set needsUpdate(value) {
-    this._needsUpdate = value;
-    if (value) this._bounds = null;
+    this._needsUpdate = Boolean(value);
+    if (this._needsUpdate) {
+      this._gpuRevision++;
+      this._bounds = null;
+    }
   }
 
   /**
@@ -73,8 +80,10 @@ export class Geometry {
    */
   dispose() {
     if (this._gpu) {
-      this._gpu.vertexBuffer.destroy();
-      this._gpu.indexBuffer.destroy();
+      for (const { vertexBuffer, indexBuffer } of this._gpu.values()) {
+        vertexBuffer.destroy();
+        indexBuffer.destroy();
+      }
       this._gpu = null;
     }
     return this;
@@ -84,4 +93,4 @@ export class Geometry {
 /** Number of floats per vertex (3 position + 3 normal + 2 uv). */
 export const VERTEX_SIZE = 8;
 /** Byte stride of one vertex in the GPU buffer. */
-export const VERTEX_STRIDE = VERTEX_SIZE * 4;
+export const VERTEX_STRIDE = VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT;

@@ -1,3 +1,38 @@
+export const TOUCH_GESTURE = Object.freeze({
+  PAN: 'pan',
+  ROTATE: 'rotate',
+});
+
+const MOUSE_POINTER_TYPE = 'mouse';
+const RIGHT_MOUSE_BUTTON = 2;
+const LEFT_MOUSE_BUTTON = 0;
+const TWO_TOUCHES = 2;
+const NDC_SPAN = 2;
+const CONTEXT_MENU_PAN_THRESHOLD = 3;
+const DEFAULT_ROTATE_SPEED = 0.005;
+const DEFAULT_ZOOM_SPEED = 0.001;
+const touchActionClaims = new WeakMap();
+
+function claimTouchAction(element) {
+  let claim = touchActionClaims.get(element);
+  if (!claim) {
+    claim = { owners: 0, previous: element.style.touchAction };
+    touchActionClaims.set(element, claim);
+  }
+  claim.owners++;
+  element.style.touchAction = 'none';
+}
+
+function releaseTouchAction(element) {
+  const claim = touchActionClaims.get(element);
+  if (!claim) return;
+  claim.owners--;
+  if (claim.owners === 0) {
+    element.style.touchAction = claim.previous;
+    touchActionClaims.delete(element);
+  }
+}
+
 /**
  * The pointer / wheel plumbing shared by the camera controls
  * (OrbitControls in 3D, PanZoomControls in 2D). Owns everything about
@@ -22,15 +57,15 @@ export class PointerControls {
 
     /** Set to false to ignore input, e.g. while dragging an object. */
     this.enabled = true;
-    this.rotateSpeed = 0.005;
-    this.zoomSpeed = 0.001;
+    this.rotateSpeed = DEFAULT_ROTATE_SPEED;
+    this.zoomSpeed = DEFAULT_ZOOM_SPEED;
     /** Set to false to disable the rotate gesture (pan and zoom still work). */
     this.enableRotate = true;
     /**
      * What a one-finger touch drag does: 'pan' (default) or 'rotate'.
      * Two-finger gestures always pan and pinch-zoom.
      */
-    this.singleTouchGesture = 'pan';
+    this.singleTouchGesture = TOUCH_GESTURE.PAN;
 
     this._dragging = false;
     this._panning = false;
@@ -38,79 +73,20 @@ export class PointerControls {
     this._panDistance = 0;
     this._lastX = 0;
     this._lastY = 0;
+    this._mousePointerId = null;
     this._touches = new Map(); // pointerId -> {x, y} of active touch points
     this._pinchDistance = 0;
+    this._disposed = false;
 
     // Without this the browser claims touch drags for scrolling and
     // pinches for page zoom before the pointer events reach us.
-    this._previousTouchAction = domElement.style.touchAction;
-    domElement.style.touchAction = 'none';
+    claimTouchAction(domElement);
 
-    this._onPointerDown = (e) => {
-      if (!this.enabled) return;
-      if (e.pointerType !== 'mouse') {
-        this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (this._touches.size === 2) {
-          const [a, b] = this._touches.values();
-          this._pinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
-        }
-        this.domElement.setPointerCapture(e.pointerId);
-        return;
-      }
-      this._dragging = true;
-      // Right button pans; Alt + left button rotates.
-      this._panning = e.button === 2;
-      this._leftDrag = e.button === 0;
-      if (this._panning) this._panDistance = 0;
-      this._lastX = e.clientX;
-      this._lastY = e.clientY;
-      this.domElement.setPointerCapture(e.pointerId);
-    };
-    this._onPointerMove = (e) => {
-      if (!this.enabled) return;
-      if (e.pointerType !== 'mouse') {
-        this._touchMove(e);
-        return;
-      }
-      if (!this._dragging) return;
-      const dx = e.clientX - this._lastX;
-      const dy = e.clientY - this._lastY;
-      this._lastX = e.clientX;
-      this._lastY = e.clientY;
-      if (this._panning) {
-        this._panDistance += Math.abs(dx) + Math.abs(dy);
-        this._pan(dx, dy);
-      } else if (this._leftDrag && e.altKey && this.enableRotate) {
-        // Alt is checked per move event, so pressing it mid-drag
-        // starts rotating and releasing it pauses.
-        this._rotate(dx * this.rotateSpeed, dy * this.rotateSpeed);
-      }
-    };
-    this._onPointerUp = (e) => {
-      if (e.pointerType !== 'mouse') {
-        this._touches.delete(e.pointerId);
-        // Dropping below two fingers re-arms the pinch for next time.
-        this._pinchDistance = 0;
-      }
-      this._dragging = false;
-      if (this.domElement.hasPointerCapture(e.pointerId)) {
-        this.domElement.releasePointerCapture(e.pointerId);
-      }
-    };
-    // A plain right-click keeps the browser's default menu; if the user
-    // dragged (panned) more than a few pixels, block it. Long-pressing
-    // during a touch gesture would also pop the menu — block that too.
-    this._onContextMenu = (e) => {
-      if (!this.enabled) return;
-      if (this._panDistance > 3 || this._touches.size > 0) e.preventDefault();
-    };
-    this._onWheel = (e) => {
-      if (!this.enabled) return;
-      e.preventDefault();
-      const factor = Math.exp(e.deltaY * this.zoomSpeed);
-      const ndc = this._toNdc(e.clientX, e.clientY);
-      this._zoom(factor, ndc.x, ndc.y);
-    };
+    this._onPointerDown = this._handlePointerDown.bind(this);
+    this._onPointerMove = this._handlePointerMove.bind(this);
+    this._onPointerUp = this._handlePointerUp.bind(this);
+    this._onContextMenu = this._handleContextMenu.bind(this);
+    this._onWheel = this._handleWheel.bind(this);
 
     domElement.addEventListener('pointerdown', this._onPointerDown);
     domElement.addEventListener('pointermove', this._onPointerMove);
@@ -120,12 +96,95 @@ export class PointerControls {
     domElement.addEventListener('wheel', this._onWheel, { passive: false });
   }
 
+  _handlePointerDown(event) {
+    if (!this.enabled) return;
+    if (event.pointerType !== MOUSE_POINTER_TYPE) {
+      this._touches.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (this._touches.size === TWO_TOUCHES) {
+        const [first, second] = this._touches.values();
+        this._pinchDistance = Math.hypot(
+          first.x - second.x,
+          first.y - second.y,
+        );
+      }
+      this.domElement.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    this._dragging = true;
+    this._mousePointerId = event.pointerId;
+    this._panning = event.button === RIGHT_MOUSE_BUTTON;
+    this._leftDrag = event.button === LEFT_MOUSE_BUTTON;
+    if (this._panning) this._panDistance = 0;
+    this._lastX = event.clientX;
+    this._lastY = event.clientY;
+    this.domElement.setPointerCapture(event.pointerId);
+  }
+
+  _handlePointerMove(event) {
+    if (!this.enabled) return;
+    if (event.pointerType !== MOUSE_POINTER_TYPE) {
+      this._touchMove(event);
+      return;
+    }
+    if (!this._dragging || event.pointerId !== this._mousePointerId) return;
+
+    const dx = event.clientX - this._lastX;
+    const dy = event.clientY - this._lastY;
+    this._lastX = event.clientX;
+    this._lastY = event.clientY;
+    if (this._panning) {
+      this._panDistance += Math.abs(dx) + Math.abs(dy);
+      this._pan(dx, dy);
+    } else if (this._leftDrag && event.altKey && this.enableRotate) {
+      // Alt is checked per move event, so pressing it mid-drag starts
+      // rotating and releasing it pauses.
+      this._rotate(dx * this.rotateSpeed, dy * this.rotateSpeed);
+    }
+  }
+
+  _handlePointerUp(event) {
+    if (event.pointerType !== MOUSE_POINTER_TYPE) {
+      this._touches.delete(event.pointerId);
+      // Dropping below two fingers re-arms the pinch for next time.
+      this._pinchDistance = 0;
+    } else {
+      if (event.pointerId !== this._mousePointerId) return;
+      this._dragging = false;
+      this._mousePointerId = null;
+    }
+    this._releasePointer(event.pointerId);
+  }
+
+  _handleContextMenu(event) {
+    if (!this.enabled) return;
+    const wasPanGesture = this._panDistance > CONTEXT_MENU_PAN_THRESHOLD;
+    if (wasPanGesture || this._touches.size > 0) event.preventDefault();
+  }
+
+  _handleWheel(event) {
+    if (!this.enabled) return;
+    event.preventDefault();
+    const factor = Math.exp(event.deltaY * this.zoomSpeed);
+    const ndc = this._toNdc(event.clientX, event.clientY);
+    this._zoom(factor, ndc.x, ndc.y);
+  }
+
+  _releasePointer(pointerId) {
+    if (this.domElement.hasPointerCapture(pointerId)) {
+      this.domElement.releasePointerCapture(pointerId);
+    }
+  }
+
   /** A client-space position in normalized device coordinates (-1..1). */
   _toNdc(clientX, clientY) {
     const rect = this.domElement.getBoundingClientRect();
     return {
-      x: ((clientX - rect.left) / rect.width) * 2 - 1,
-      y: 1 - ((clientY - rect.top) / rect.height) * 2,
+      x: ((clientX - rect.left) / rect.width) * NDC_SPAN - 1,
+      y: 1 - ((clientY - rect.top) / rect.height) * NDC_SPAN,
     };
   }
 
@@ -138,7 +197,10 @@ export class PointerControls {
       const dy = e.clientY - touch.y;
       touch.x = e.clientX;
       touch.y = e.clientY;
-      if (this.singleTouchGesture === 'rotate' && this.enableRotate) {
+      if (
+        this.singleTouchGesture === TOUCH_GESTURE.ROTATE &&
+        this.enableRotate
+      ) {
         this._rotate(dx * this.rotateSpeed, dy * this.rotateSpeed);
       } else {
         this._pan(dx, dy);
@@ -173,7 +235,19 @@ export class PointerControls {
   _zoom(factor, ndcX, ndcY) {}
 
   dispose() {
-    this.domElement.style.touchAction = this._previousTouchAction;
+    if (this._disposed) return;
+    this._disposed = true;
+    if (this._mousePointerId !== null) {
+      this._releasePointer(this._mousePointerId);
+      this._mousePointerId = null;
+    }
+    for (const pointerId of this._touches.keys()) {
+      this._releasePointer(pointerId);
+    }
+    this._touches.clear();
+    this._dragging = false;
+    this._pinchDistance = 0;
+    releaseTouchAction(this.domElement);
     this.domElement.removeEventListener('pointerdown', this._onPointerDown);
     this.domElement.removeEventListener('pointermove', this._onPointerMove);
     this.domElement.removeEventListener('pointerup', this._onPointerUp);

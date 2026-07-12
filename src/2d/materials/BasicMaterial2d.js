@@ -1,4 +1,5 @@
 import { Material2d } from './Material2d.js';
+import { BASIC_FRAGMENT_SHADER_2D } from '../shaders/fragments.js';
 
 /**
  * Fills the shape with a flat color. Alpha below 1 shows through to
@@ -6,12 +7,6 @@ import { Material2d } from './Material2d.js';
  */
 export class BasicMaterial2d extends Material2d {
   get fragmentShader() {
-    return /* wgsl */ `
-@fragment
-fn fs(input: VertexOut) -> @location(0) vec4f {
-  let base = objectColor(input);
-  return vec4f(linearToSrgb(base.rgb), base.a);
-}
-`;
+    return BASIC_FRAGMENT_SHADER_2D;
   }
 }

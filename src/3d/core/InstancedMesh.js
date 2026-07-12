@@ -1,8 +1,8 @@
 import { Mesh } from './Mesh.js';
 import { srgbToLinear } from '../../math/color.js';
+import { INSTANCE_SIZE } from '../constants.js';
 
-/** Floats per instance: a mat4 (16) followed by an rgba color (4). */
-export const INSTANCE_SIZE = 20;
+export { INSTANCE_SIZE } from '../constants.js';
 
 /**
  * A Mesh drawn `count` times in one draw call. Each instance has its
@@ -38,8 +38,20 @@ export class InstancedMesh extends Mesh {
       this.instanceData[base + 15] = 1;
       this.instanceData.fill(1, base + 16, base + 20);
     }
-    /** True when instanceData has changes the renderer hasn't uploaded yet. */
-    this.needsUpdate = true;
+    // Resource caches compare revisions so every renderer/device receives
+    // an edit, even after another renderer has cleared needsUpdate.
+    this._instanceRevision = 0;
+    this._needsUpdate = true;
+  }
+
+  /** Upload hint; set true after changing `instanceData` directly. */
+  get needsUpdate() {
+    return this._needsUpdate;
+  }
+
+  set needsUpdate(value) {
+    this._needsUpdate = Boolean(value);
+    if (this._needsUpdate) this._instanceRevision++;
   }
 
   /** Copies a Mat4 into instance `index`'s transform. */

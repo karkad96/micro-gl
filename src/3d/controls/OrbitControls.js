@@ -1,4 +1,12 @@
-import { PointerControls } from '../../core/PointerControls.js';
+import {
+  PointerControls,
+  TOUCH_GESTURE,
+} from '../../core/PointerControls.js';
+
+const DEFAULT_POLAR_ANGLE = Math.PI / 2;
+const DIRECTION_EPSILON = 1e-12;
+const POLE_TILT_EPSILON = 1e-4;
+const DEGREES_TO_HALF_RADIANS = Math.PI / 360;
 
 /**
  * Mouse / touch controls that orbit a camera around a target point.
@@ -14,7 +22,7 @@ export class OrbitControls extends PointerControls {
   constructor(camera, domElement) {
     super(domElement);
     this.camera = camera;
-    this.singleTouchGesture = 'rotate';
+    this.singleTouchGesture = TOUCH_GESTURE.ROTATE;
 
     // Shares the camera's target so lookAt stays in sync.
     this.target = camera.target;
@@ -30,9 +38,16 @@ export class OrbitControls extends PointerControls {
     const dx = camera.position.x - this.target.x;
     const dy = camera.position.y - this.target.y;
     const dz = camera.position.z - this.target.z;
-    this.radius = Math.max(Math.hypot(dx, dy, dz), this.minRadius);
+    const initialRadius = Math.hypot(dx, dy, dz);
+    this.radius = Math.min(
+      Math.max(initialRadius, this.minRadius),
+      this.maxRadius,
+    );
     this.theta = Math.atan2(dx, dz);
-    this.phi = Math.acos(Math.min(Math.max(dy / this.radius, -1), 1));
+    this.phi =
+      initialRadius > DIRECTION_EPSILON
+        ? Math.acos(Math.min(Math.max(dy / initialRadius, -1), 1))
+        : DEFAULT_POLAR_ANGLE;
   }
 
   /**
@@ -42,7 +57,7 @@ export class OrbitControls extends PointerControls {
   _visibleHalfHeight() {
     return this.camera.isOrthographic
       ? this.camera.size / this.camera.zoom
-      : this.radius * Math.tan((this.camera.fov * Math.PI) / 360);
+      : this.radius * Math.tan(this.camera.fov * DEGREES_TO_HALF_RADIANS);
   }
 
   _rotate(rx, ry) {
@@ -98,7 +113,7 @@ export class OrbitControls extends PointerControls {
     // Keep an imperceptible tilt so that even at phi = 0 (straight
     // top-down) the camera's screen orientation follows theta, letting
     // the view spin around the vertical axis.
-    const phi = Math.max(this.phi, 1e-4);
+    const phi = Math.max(this.phi, POLE_TILT_EPSILON);
     const sinPhi = Math.sin(phi);
     this.camera.position.set(
       this.target.x + this.radius * sinPhi * Math.sin(this.theta),

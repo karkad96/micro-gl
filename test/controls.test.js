@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PointerControls } from '../src/core/PointerControls.js';
+import {
+  PointerControls,
+  TOUCH_GESTURE,
+} from '../src/core/PointerControls.js';
 import { DragControls } from '../src/3d/controls/DragControls.js';
 import { PerspectiveCamera } from '../src/3d/cameras/PerspectiveCamera.js';
 import { Mesh } from '../src/3d/core/Mesh.js';
@@ -21,6 +24,7 @@ class FakeElement {
     this.style = {};
     this.clientHeight = 100;
     this._listeners = new Map();
+    this._capturedPointers = new Set();
   }
   addEventListener(type, handler) {
     this._listeners.set(type, handler);
@@ -34,10 +38,14 @@ class FakeElement {
   getBoundingClientRect() {
     return { left: 0, top: 0, width: 100, height: 100 };
   }
-  setPointerCapture() {}
-  releasePointerCapture() {}
-  hasPointerCapture() {
-    return false;
+  setPointerCapture(pointerId) {
+    this._capturedPointers.add(pointerId);
+  }
+  releasePointerCapture(pointerId) {
+    this._capturedPointers.delete(pointerId);
+  }
+  hasPointerCapture(pointerId) {
+    return this._capturedPointers.has(pointerId);
   }
 }
 
@@ -73,7 +81,7 @@ test('a one-finger touch drag pans by default', () => {
 test("singleTouchGesture = 'rotate' makes one finger rotate instead", () => {
   const element = new FakeElement();
   const controls = new RecordingControls(element);
-  controls.singleTouchGesture = 'rotate';
+  controls.singleTouchGesture = TOUCH_GESTURE.ROTATE;
   element.dispatch('pointerdown', touch(1, 10, 10));
   element.dispatch('pointermove', touch(1, 20, 10));
   assert.equal(controls.calls.length, 1);
@@ -178,4 +186,39 @@ test('touch-action is claimed on construction and restored on dispose', () => {
   assert.equal(element.style.touchAction, 'none');
   controls.dispose();
   assert.equal(element.style.touchAction, 'pan-y');
+});
+
+test('touch-action remains claimed until every control is disposed', () => {
+  const element = new FakeElement();
+  element.style.touchAction = 'pan-y';
+  const first = new PointerControls(element);
+  const second = new PointerControls(element);
+
+  first.dispose();
+  assert.equal(element.style.touchAction, 'none');
+  second.dispose();
+  assert.equal(element.style.touchAction, 'pan-y');
+});
+
+test('an unrelated pointer-up does not cancel a mouse drag', () => {
+  const element = new FakeElement();
+  const controls = new RecordingControls(element);
+  element.dispatch('pointerdown', {
+    pointerType: 'mouse',
+    pointerId: 1,
+    button: 2,
+    clientX: 10,
+    clientY: 10,
+  });
+  element.dispatch('pointerup', { pointerType: 'mouse', pointerId: 2 });
+  element.dispatch('pointermove', {
+    pointerType: 'mouse',
+    pointerId: 1,
+    clientX: 14,
+    clientY: 7,
+  });
+
+  assert.deepEqual(controls.calls, [['pan', 4, -3]]);
+  controls.dispose();
+  assert.equal(element.hasPointerCapture(1), false);
 });

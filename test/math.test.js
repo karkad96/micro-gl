@@ -140,3 +140,13 @@ test('Vec2.applyMat3 rotates a point', () => {
   assertClose(p.x, 0);
   assertClose(p.y, 1);
 });
+
+test('vector normalization remains stable for very large finite values', () => {
+  const v2 = new Vec2(1e200, 0).normalize();
+  const v3 = new Vec3(0, -1e200, 0).normalize();
+  assertClose(v2.x, 1);
+  assertClose(v2.y, 0);
+  assertClose(v3.x, 0);
+  assertClose(v3.y, -1);
+  assertClose(v3.z, 0);
+});

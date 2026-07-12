@@ -2,36 +2,36 @@ import { Mesh } from './Mesh.js';
 import { Mat4 } from '../../math/Mat4.js';
 import { srgbToLinear } from '../../math/color.js';
 import { GpuResources } from './GpuResources.js';
+import {
+  FRAME_UNIFORM_SIZE,
+  FrameUniformWriter,
+  OBJECT_UNIFORM_OFFSET,
+} from './Uniforms.js';
 import { initWebGpu } from '../../core/initWebGpu.js';
-import { DirectionalLight } from '../lights/DirectionalLight.js';
-import { AmbientLight } from '../lights/AmbientLight.js';
-import { PointLight } from '../lights/PointLight.js';
-import { MAX_POINT_LIGHTS } from '../materials/Material.js';
-
-// FrameUniforms: mat4x4f (64) + three vec3f in 16-byte slots (the
-// point-light count packs into ambientColor's slot) + MAX_POINT_LIGHTS
-// point lights at 32 bytes each, matching the WGSL struct in Material.js.
-const FRAME_UNIFORM_SIZE = 112 + MAX_POINT_LIGHTS * 32;
-// Float offsets of the FrameUniforms fields; the skipped indices
-// (19, 23) are the vec3f padding.
-const VIEW_PROJECTION = 0;
-const LIGHT_DIRECTION = 16;
-const LIGHT_COLOR = 20;
-const AMBIENT_COLOR = 24;
-const POINT_LIGHT_COUNT = 27;
-// Each light: position (3 floats + pad), color (3 floats + pad).
-const POINT_LIGHTS = 28;
-const POINT_LIGHT_STRIDE = 8;
-
-// Float offsets of the ObjectUniforms fields, matching the WGSL struct
-// in Material.js (two mat4x4f, then a vec4f).
-const MODEL_MATRIX = 0;
-const NORMAL_MATRIX = 16;
-const OBJECT_COLOR = 32;
+import {
+  ANTIALIAS_SAMPLE_COUNT,
+  DEFAULT_CANVAS_HEIGHT,
+  DEFAULT_CANVAS_WIDTH,
+  DEPTH_CLEAR_VALUE,
+  DEPTH_FORMAT,
+  SINGLE_SAMPLE_COUNT,
+  colorAttachment,
+  drawingBufferSize,
+} from '../../core/rendererConfig.js';
+import {
+  acquireDeviceLease,
+  releaseDeviceLease,
+} from '../../core/deviceLease.js';
+import {
+  INDEX_FORMAT,
+  SHADER_BIND_GROUP,
+  SHADER_BINDING,
+  VERTEX_BUFFER_SLOT,
+} from '../../core/pipelineConstants.js';
 
 /**
- * The WebGPU renderer. Owns the device, the canvas swap chain and the
- * depth buffer; per-object GPU resources live in `GpuResources`.
+ * The WebGPU renderer. Owns or shares a device lease and manages the canvas
+ * swap chain and depth buffer; per-object GPU resources live in GpuResources.
  *
  * Usage:
  *   const renderer = new Renderer(canvas);
@@ -58,17 +58,24 @@ export class Renderer {
     this.drawCount = 0;
 
     this._autoResize = autoResize;
-    this._sampleCount = antialias ? 4 : 1;
+    this._sampleCount = antialias
+      ? ANTIALIAS_SAMPLE_COUNT
+      : SINGLE_SAMPLE_COUNT;
     this._resizeObserver = null;
     this._ownsDevice = false;
+    this._deviceLease = null;
+    this._initPromise = null;
+    this._initVersion = 0;
     this._resources = null;
     this._depthTexture = null;
     this._depthView = null;
     this._msaaTexture = null;
     this._msaaView = null;
+    this._targetWidth = 0;
+    this._targetHeight = 0;
     this._opaqueList = [];
     this._transparentList = [];
-    this._frameData = new Float32Array(FRAME_UNIFORM_SIZE / 4);
+    this._frameUniformWriter = new FrameUniformWriter();
     this._normalMatrix = new Mat4();
   }
 
@@ -82,53 +89,122 @@ export class Renderer {
    * @param {{device, context, format}} [shared]
    */
   async init(shared) {
-    this._ownsDevice = !shared;
-    const gpu = shared || (await initWebGpu(this.canvas));
-    this.device = gpu.device;
-    this.context = gpu.context;
-    this.format = gpu.format;
+    // Coalesce overlapping calls so one canvas is never configured with two
+    // newly requested devices. Both callers observe the same result.
+    if (this._initPromise) return this._initPromise;
+    if (this.device) throw new Error('Renderer is already initialized');
 
-    this._resources = new GpuResources(
-      this.device,
-      this.format,
-      this._sampleCount,
-    );
-
-    this._frameUniformBuffer = this.device.createBuffer({
-      size: FRAME_UNIFORM_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    this._frameBindGroup = this.device.createBindGroup({
-      layout: this._resources.frameBindGroupLayout,
-      entries: [{ binding: 0, resource: { buffer: this._frameUniformBuffer } }],
-    });
-
-    this.setSize(
-      this.canvas.clientWidth || 300,
-      this.canvas.clientHeight || 150,
-    );
-    if (this._autoResize && typeof ResizeObserver !== 'undefined') {
-      this._resizeObserver = new ResizeObserver((entries) => {
-        const { width, height } = entries[0].contentRect;
-        if (width > 0 && height > 0) this.setSize(width, height);
-      });
-      this._resizeObserver.observe(this.canvas);
+    const version = ++this._initVersion;
+    const initialization = this._completeInitialization(shared, version);
+    this._initPromise = initialization;
+    try {
+      return await initialization;
+    } finally {
+      if (this._initPromise === initialization) {
+        this._initPromise = null;
+      }
     }
-    return this;
+  }
+
+  async _completeInitialization(shared, version) {
+    const renderer = await this._initialize(shared, version);
+    if (version !== this._initVersion) {
+      throw new Error('Renderer initialization was cancelled by dispose()');
+    }
+    return renderer;
+  }
+
+  async _initialize(shared, version) {
+    const gpu = shared || (await initWebGpu(this.canvas));
+    if (version !== this._initVersion) {
+      // dispose() was called while the adapter/device request was pending.
+      // No newer init can start until this promise settles, so this canvas
+      // configuration is ours to release.
+      if (!shared) {
+        gpu.context.unconfigure();
+        gpu.device.destroy();
+      }
+      throw new Error('Renderer initialization was cancelled by dispose()');
+    }
+
+    let leaseAcquired = false;
+    try {
+      const lease = acquireDeviceLease(this, gpu, shared);
+      leaseAcquired = true;
+      this.device = lease.device;
+      this.context = lease.context;
+      this.format = lease.format;
+
+      this._resources = new GpuResources(
+        this.device,
+        this.format,
+        this._sampleCount,
+      );
+
+      this._frameUniformBuffer = this.device.createBuffer({
+        size: FRAME_UNIFORM_SIZE,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      this._frameBindGroup = this.device.createBindGroup({
+        layout: this._resources.frameBindGroupLayout,
+        entries: [
+          {
+            binding: SHADER_BINDING.uniforms,
+            resource: { buffer: this._frameUniformBuffer },
+          },
+        ],
+      });
+
+      this.setSize(
+        this.canvas.clientWidth || DEFAULT_CANVAS_WIDTH,
+        this.canvas.clientHeight || DEFAULT_CANVAS_HEIGHT,
+      );
+      if (this._autoResize && typeof ResizeObserver !== 'undefined') {
+        this._resizeObserver = new ResizeObserver((entries) => {
+          const { width, height } = entries[0].contentRect;
+          if (width > 0 && height > 0) this.setSize(width, height);
+        });
+        this._resizeObserver.observe(this.canvas);
+      }
+      return this;
+    } catch (error) {
+      if (leaseAcquired) {
+        // Roll back membership and every resource created before the error.
+        this.dispose();
+      } else if (!shared) {
+        gpu.context.unconfigure();
+        gpu.device.destroy();
+      }
+      throw error;
+    }
   }
 
   /** Resizes the drawing buffer and depth texture. Pass CSS pixel dimensions. */
   setSize(width, height) {
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-    this.canvas.width = Math.max(1, Math.floor(width * pixelRatio));
-    this.canvas.height = Math.max(1, Math.floor(height * pixelRatio));
+    const size = drawingBufferSize(width, height);
+    this.canvas.width = size.width;
+    this.canvas.height = size.height;
 
     if (!this.device) return;
+    this._recreateRenderTargets();
+  }
+
+  /** Keeps attachments valid when another renderer resized a shared canvas. */
+  _ensureRenderTargets() {
+    const sizeChanged =
+      this._targetWidth !== this.canvas.width ||
+      this._targetHeight !== this.canvas.height;
+    const attachmentMissing =
+      !this._depthTexture || (this._sampleCount > 1 && !this._msaaTexture);
+    if (attachmentMissing || sizeChanged) this._recreateRenderTargets();
+  }
+
+  _recreateRenderTargets() {
     const size = [this.canvas.width, this.canvas.height];
     if (this._depthTexture) this._depthTexture.destroy();
     this._depthTexture = this.device.createTexture({
       size,
-      format: 'depth24plus',
+      format: DEPTH_FORMAT,
       sampleCount: this._sampleCount,
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
@@ -147,24 +223,37 @@ export class Renderer {
       });
       this._msaaView = this._msaaTexture.createView();
     }
+    this._targetWidth = this.canvas.width;
+    this._targetHeight = this.canvas.height;
   }
 
   /** Draws one frame of `scene` as seen from `camera`. */
   render(scene, camera) {
+    if (!this.device) {
+      throw new Error('Renderer.init() must complete before render()');
+    }
+    this._ensureRenderTargets();
     camera.aspect = this.canvas.width / this.canvas.height;
 
     scene.updateWorldMatrix();
     camera.updateMatrices();
 
     this._writeFrameUniforms(scene, camera);
+    this._collectMeshes(scene, camera);
 
-    // Opaque meshes draw first, in scene order. Transparent meshes draw
-    // after, sorted back-to-front by view-space depth — the 3D
-    // counterpart of Renderer2d's zIndex sort. Their pipelines blend
-    // and don't write depth (see Pipelines), so what's behind them
-    // stays visible.
-    const opaque = this._opaqueList;
-    const transparent = this._transparentList;
+    const encoder = this.device.createCommandEncoder();
+    const pass = this._beginRenderPass(encoder, scene.background);
+    pass.setBindGroup(SHADER_BIND_GROUP.frame, this._frameBindGroup);
+    for (const mesh of this._opaqueList) this._drawMesh(pass, mesh);
+    for (const mesh of this._transparentList) this._drawMesh(pass, mesh);
+
+    pass.end();
+    this.device.queue.submit([encoder.finish()]);
+  }
+
+  /** Collects visible meshes and orders transparent ones back-to-front. */
+  _collectMeshes(scene, camera) {
+    const { _opaqueList: opaque, _transparentList: transparent } = this;
     opaque.length = 0;
     transparent.length = 0;
     let drawCount = 0;
@@ -185,112 +274,41 @@ export class Renderer {
       }
       transparent.sort((a, b) => a._viewDepth - b._viewDepth);
     }
+  }
 
-    const encoder = this.device.createCommandEncoder();
+  _beginRenderPass(encoder, background) {
     const swapView = this.context.getCurrentTexture().createView();
-    const pass = encoder.beginRenderPass({
-      colorAttachments: [
-        this._msaaView
-          ? {
-              view: this._msaaView,
-              // The resolved copy is what reaches the screen; the raw
-              // samples aren't needed after the pass, so discard them.
-              resolveTarget: swapView,
-              clearValue: scene.background,
-              loadOp: 'clear',
-              storeOp: 'discard',
-            }
-          : {
-              view: swapView,
-              clearValue: scene.background,
-              loadOp: 'clear',
-              storeOp: 'store',
-            },
-      ],
+    return encoder.beginRenderPass({
+      colorAttachments: [colorAttachment(this._msaaView, swapView, background)],
       depthStencilAttachment: {
         view: this._depthView,
-        depthClearValue: 1,
+        depthClearValue: DEPTH_CLEAR_VALUE,
         depthLoadOp: 'clear',
         depthStoreOp: 'store',
       },
     });
-
-    pass.setBindGroup(0, this._frameBindGroup);
-    for (const mesh of opaque) this._drawMesh(pass, mesh);
-    for (const mesh of transparent) this._drawMesh(pass, mesh);
-
-    pass.end();
-    this.device.queue.submit([encoder.finish()]);
   }
 
   _writeFrameUniforms(scene, camera) {
-    const data = this._frameData;
-    let directional = null;
-    let pointLightCount = 0;
-    let ambientR = 0,
-      ambientG = 0,
-      ambientB = 0;
-    scene.traverseVisible((object) => {
-      if (!directional && object instanceof DirectionalLight)
-        directional = object;
-      if (object instanceof PointLight && pointLightCount < MAX_POINT_LIGHTS) {
-        const base = POINT_LIGHTS + pointLightCount * POINT_LIGHT_STRIDE;
-        // The light shines from its scene-graph world position.
-        const w = object.worldMatrix.elements;
-        data[base] = w[12];
-        data[base + 1] = w[13];
-        data[base + 2] = w[14];
-        // Colors are authored in sRGB; lighting happens in linear.
-        data[base + 4] = srgbToLinear(object.color[0]) * object.intensity;
-        data[base + 5] = srgbToLinear(object.color[1]) * object.intensity;
-        data[base + 6] = srgbToLinear(object.color[2]) * object.intensity;
-        pointLightCount++;
-      }
-      if (object instanceof AmbientLight) {
-        ambientR += srgbToLinear(object.color[0]) * object.intensity;
-        ambientG += srgbToLinear(object.color[1]) * object.intensity;
-        ambientB += srgbToLinear(object.color[2]) * object.intensity;
-      }
-    });
-    data[POINT_LIGHT_COUNT] = pointLightCount;
-
-    data.set(camera.viewProjectionMatrix.elements, VIEW_PROJECTION);
-
-    if (directional) {
-      const dir = directional.direction;
-      const len = dir.length() || 1;
-      data[LIGHT_DIRECTION] = dir.x / len;
-      data[LIGHT_DIRECTION + 1] = dir.y / len;
-      data[LIGHT_DIRECTION + 2] = dir.z / len;
-      const { color, intensity } = directional;
-      data[LIGHT_COLOR] = srgbToLinear(color[0]) * intensity;
-      data[LIGHT_COLOR + 1] = srgbToLinear(color[1]) * intensity;
-      data[LIGHT_COLOR + 2] = srgbToLinear(color[2]) * intensity;
-    } else {
-      data[LIGHT_DIRECTION] = 0;
-      data[LIGHT_DIRECTION + 1] = -1;
-      data[LIGHT_DIRECTION + 2] = 0;
-      data[LIGHT_COLOR] = 0;
-      data[LIGHT_COLOR + 1] = 0;
-      data[LIGHT_COLOR + 2] = 0;
-    }
-    data[AMBIENT_COLOR] = ambientR;
-    data[AMBIENT_COLOR + 1] = ambientG;
-    data[AMBIENT_COLOR + 2] = ambientB;
-
-    this.device.queue.writeBuffer(this._frameUniformBuffer, 0, data);
+    this._frameUniformWriter.write(
+      scene,
+      camera,
+      this.device,
+      this._frameUniformBuffer,
+    );
   }
 
   /**
-   * Releases everything the renderer itself owns: the resize observer,
-   * the frame uniform buffer, the depth texture and — when this
-   * renderer created the GPU device rather than sharing one via
-   * init(shared) — the device itself. Per-object GPU state lives on
-   * the scene objects; release it with object.dispose(),
-   * geometry.dispose() and texture.dispose(). The renderer cannot be
-   * used after this.
+   * Releases the resize observer, frame buffer, render targets and this
+   * renderer's per-object buffers. A
+   * managed shared device stays alive until the last renderer using it
+   * is disposed. Geometry and texture caches may be shared; release those
+   * separately with geometry.dispose() and texture.dispose(). Call init()
+   * again before reusing this renderer.
    */
   dispose() {
+    // Invalidates an adapter/device request that has not completed yet.
+    this._initVersion++;
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
@@ -298,17 +316,27 @@ export class Renderer {
     if (this._frameUniformBuffer) this._frameUniformBuffer.destroy();
     if (this._depthTexture) this._depthTexture.destroy();
     if (this._msaaTexture) this._msaaTexture.destroy();
+    if (this._resources) this._resources.dispose();
     this._frameUniformBuffer = null;
     this._depthTexture = null;
     this._depthView = null;
     this._msaaTexture = null;
     this._msaaView = null;
-    if (this._ownsDevice && this.device) {
+    this._targetWidth = 0;
+    this._targetHeight = 0;
+    const shouldDestroyDevice = releaseDeviceLease(this);
+    if (shouldDestroyDevice && this.device) {
       this.context.unconfigure();
       this.device.destroy();
     }
     this.device = null;
     this.context = null;
+    this.format = null;
+    this._frameBindGroup = null;
+    this._resources = null;
+    this._opaqueList.length = 0;
+    this._transparentList.length = 0;
+    this._ownsDevice = false;
   }
 
   _drawMesh(pass, mesh) {
@@ -319,31 +347,37 @@ export class Renderer {
 
     // Per-object uniforms: model matrix, normal matrix, color.
     const data = meshGPU.data;
-    data.set(mesh.worldMatrix.elements, MODEL_MATRIX);
-    this._normalMatrix.copy(mesh.worldMatrix).invert().transpose();
-    data.set(this._normalMatrix.elements, NORMAL_MATRIX);
+    data.set(mesh.worldMatrix.elements, OBJECT_UNIFORM_OFFSET.modelMatrix);
+    this._normalMatrix.copy(mesh.worldMatrix);
+    if (this._normalMatrix.tryInvert()) {
+      this._normalMatrix.transpose();
+    } else {
+      // A collapsed axis has no inverse normal transform. Keep rendering
+      // deterministic; raycasting/dragging skip the singular object.
+      this._normalMatrix.identity();
+    }
+    data.set(
+      this._normalMatrix.elements,
+      OBJECT_UNIFORM_OFFSET.normalMatrix,
+    );
     const color = mesh.material.color;
-    data[OBJECT_COLOR] = srgbToLinear(color[0]);
-    data[OBJECT_COLOR + 1] = srgbToLinear(color[1]);
-    data[OBJECT_COLOR + 2] = srgbToLinear(color[2]);
-    data[OBJECT_COLOR + 3] = color.length > 3 ? color[3] : 1;
+    const colorOffset = OBJECT_UNIFORM_OFFSET.color;
+    data[colorOffset] = srgbToLinear(color[0]);
+    data[colorOffset + 1] = srgbToLinear(color[1]);
+    data[colorOffset + 2] = srgbToLinear(color[2]);
+    data[colorOffset + 3] = color.length > 3 ? color[3] : 1;
     this.device.queue.writeBuffer(meshGPU.uniformBuffer, 0, data);
 
     pass.setPipeline(pipeline);
-    pass.setBindGroup(1, meshGPU.bindGroup);
-    pass.setVertexBuffer(0, geometryGPU.vertexBuffer);
+    pass.setBindGroup(SHADER_BIND_GROUP.object, meshGPU.bindGroup);
+    pass.setVertexBuffer(
+      VERTEX_BUFFER_SLOT.geometry,
+      geometryGPU.vertexBuffer,
+    );
     if (instanced) {
-      if (mesh.needsUpdate) {
-        this.device.queue.writeBuffer(
-          meshGPU.instanceBuffer,
-          0,
-          mesh.instanceData,
-        );
-        mesh.needsUpdate = false;
-      }
-      pass.setVertexBuffer(1, meshGPU.instanceBuffer);
+      pass.setVertexBuffer(VERTEX_BUFFER_SLOT.instance, meshGPU.instanceBuffer);
     }
-    pass.setIndexBuffer(geometryGPU.indexBuffer, 'uint32');
+    pass.setIndexBuffer(geometryGPU.indexBuffer, INDEX_FORMAT);
     pass.drawIndexed(mesh.geometry.indexCount, instanced ? mesh.count : 1);
   }
 }
