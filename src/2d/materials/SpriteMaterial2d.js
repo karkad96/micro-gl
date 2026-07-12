@@ -26,7 +26,8 @@ export class SpriteMaterial2d extends Material2d {
 
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
-  return textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
+  let base = textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
+  return vec4f(linearToSrgb(base.rgb), base.a);
 }
 `;
   }

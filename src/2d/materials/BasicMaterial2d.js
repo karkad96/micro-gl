@@ -9,7 +9,8 @@ export class BasicMaterial2d extends Material2d {
     return /* wgsl */ `
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
-  return objectColor(input);
+  let base = objectColor(input);
+  return vec4f(linearToSrgb(base.rgb), base.a);
 }
 `;
   }

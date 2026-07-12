@@ -10,6 +10,7 @@ export { Vec3 } from './math/Vec3.js';
 export { Mat4 } from './math/Mat4.js';
 export { Vec2 } from './math/Vec2.js';
 export { Mat3 } from './math/Mat3.js';
+export { srgbToLinear, linearToSrgb } from './math/color.js';
 export { initWebGpu } from './core/initWebGpu.js';
 export { Texture } from './core/Texture.js';
 export { PointerControls } from './core/PointerControls.js';

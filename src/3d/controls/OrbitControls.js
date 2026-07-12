@@ -4,7 +4,8 @@ import { PointerControls } from '../../core/PointerControls.js';
  * Mouse / touch controls that orbit a camera around a target point.
  * Alt + left-drag to rotate, right-drag to pan, scroll (or pinch-zoom
  * trackpad) to dolly in and out. A right-click without dragging still
- * opens the browser context menu.
+ * opens the browser context menu. On touch screens: one-finger drag
+ * orbits, two-finger drag pans, pinch zooms.
  *
  * The gesture plumbing lives in PointerControls; this class is the
  * orbit math. Call `controls.update()` once per frame before rendering.
@@ -13,6 +14,7 @@ export class OrbitControls extends PointerControls {
   constructor(camera, domElement) {
     super(domElement);
     this.camera = camera;
+    this.singleTouchGesture = 'rotate';
 
     // Shares the camera's target so lookAt stays in sync.
     this.target = camera.target;

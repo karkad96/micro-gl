@@ -37,7 +37,10 @@ export class GpuResources2d {
     return uploadTexture(this.device, texture);
   }
 
-  /** Vertex and index buffers for a geometry. */
+  /**
+   * Vertex and index buffers for a geometry, re-uploaded when its
+   * `needsUpdate` flag is set.
+   */
   geometryFor(geometry) {
     if (!geometry._gpu) {
       const vertexBuffer = this.device.createBuffer({
@@ -53,6 +56,19 @@ export class GpuResources2d {
       this.device.queue.writeBuffer(indexBuffer, 0, geometry.indices);
 
       geometry._gpu = { vertexBuffer, indexBuffer };
+      geometry.needsUpdate = false;
+    } else if (geometry.needsUpdate) {
+      this.device.queue.writeBuffer(
+        geometry._gpu.vertexBuffer,
+        0,
+        geometry.vertices,
+      );
+      this.device.queue.writeBuffer(
+        geometry._gpu.indexBuffer,
+        0,
+        geometry.indices,
+      );
+      geometry.needsUpdate = false;
     }
     return geometry._gpu;
   }

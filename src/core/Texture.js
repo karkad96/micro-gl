@@ -27,6 +27,10 @@ export class Texture {
    * @param {boolean} [options.mipmaps] generate a full mip chain on
    *   upload (default true) so minified sampling doesn't alias; turn
    *   off for textures that never shrink on screen (UI, full-screen)
+   * @param {boolean} [options.srgb] the image holds sRGB-encoded colors
+   *   (default true — the normal case for pictures): the GPU decodes
+   *   samples to linear for shading, and mipmaps are filtered in linear
+   *   space. Turn off for data textures whose values aren't colors
    */
   constructor(
     source,
@@ -37,6 +41,7 @@ export class Texture {
       addressModeV = 'clamp-to-edge',
       flipY = false,
       mipmaps = true,
+      srgb = true,
     } = {},
   ) {
     this.source = source;
@@ -46,6 +51,7 @@ export class Texture {
     this.addressModeV = addressModeV;
     this.flipY = flipY;
     this.mipmaps = mipmaps;
+    this.srgb = srgb;
     this._gpu = null;
   }
 

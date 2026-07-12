@@ -20,6 +20,22 @@ export class Geometry {
       indices instanceof Uint32Array ? indices : new Uint32Array(indices);
     this._gpu = null;
     this._bounds = null;
+    this._needsUpdate = false;
+  }
+
+  /**
+   * Set to true after editing `vertices` or `indices` in place: the
+   * renderer re-uploads the GPU buffers on the next draw and the cached
+   * bounds are recomputed. The arrays must keep their length — to
+   * change the vertex or index count, make a new geometry.
+   */
+  get needsUpdate() {
+    return this._needsUpdate;
+  }
+
+  set needsUpdate(value) {
+    this._needsUpdate = value;
+    if (value) this._bounds = null;
   }
 
   /**
