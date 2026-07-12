@@ -237,6 +237,11 @@ alpha blending on.
 
 - **Renderer.init()** requests the GPU adapter and device, configures the canvas
   context, and creates the bind group layouts and the per-frame uniform buffer.
+  If the device is ever lost (driver reset, GPU process crash), a console
+  error explains how to recover. Construct with
+  `new Renderer(canvas, { autoResize: true })` to have `setSize` follow the
+  canvas's CSS size automatically, and call `renderer.dispose()` when done
+  with it to release what it owns.
 - **Uniforms** are split into two bind groups, matching the WGSL in
   `Material.js`:
   - `@group(0)` _frame_ uniforms — view-projection matrix, light direction/color,

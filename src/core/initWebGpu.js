@@ -17,6 +17,20 @@ export async function initWebGpu(canvas) {
   }
   const device = await adapter.requestDevice();
 
+  // Driver resets and GPU-process crashes otherwise freeze rendering
+  // silently; say what happened and how to recover. 'destroyed' is the
+  // deliberate renderer.dispose() path, not a failure.
+  device.lost.then((info) => {
+    if (info.reason !== 'destroyed') {
+      console.error(
+        `micro-gl: GPU device lost (${info.reason || 'unknown'}): ` +
+          `${info.message} Rendering has stopped. To recover, create and ` +
+          'initialize a new Renderer, and dispose() your scene objects, ' +
+          'geometries and textures so their GPU state re-uploads.',
+      );
+    }
+  });
+
   const context = canvas.getContext('webgpu');
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({

@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PointerControls } from '../src/core/PointerControls.js';
+import { DragControls } from '../src/3d/controls/DragControls.js';
+import { PerspectiveCamera } from '../src/3d/cameras/PerspectiveCamera.js';
+import { Mesh } from '../src/3d/core/Mesh.js';
+import { BoxGeometry } from '../src/3d/geometries/BoxGeometry.js';
 
 const EPS = 1e-9;
 
@@ -141,6 +145,30 @@ test('mouse right-drag still pans (touch rework left the mouse path alone)', () 
     clientY: 7,
   });
   assert.deepEqual(controls.calls, [['pan', 4, -3]]);
+});
+
+test('DragControls pauses an in-progress drag while disabled', () => {
+  const element = new FakeElement();
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 0, 5);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrices();
+  const mesh = new Mesh(new BoxGeometry(2, 2, 2), {});
+  mesh.updateWorldMatrix();
+  const controls = new DragControls([mesh], camera, element);
+
+  // Grab the box through the screen center, then drag right.
+  const pointer = { pointerId: 1, button: 0, altKey: false, clientY: 50 };
+  element.dispatch('pointerdown', { ...pointer, clientX: 50 });
+  assert.equal(controls.selected, mesh);
+
+  controls.enabled = false;
+  element.dispatch('pointermove', { ...pointer, clientX: 70 });
+  assert.equal(mesh.position.x, 0, 'disabled controls must not move it');
+
+  controls.enabled = true;
+  element.dispatch('pointermove', { ...pointer, clientX: 70 });
+  assert.ok(mesh.position.x > 0, 're-enabling resumes the drag');
 });
 
 test('touch-action is claimed on construction and restored on dispose', () => {
