@@ -76,6 +76,8 @@ src/
       Renderer.js     swap chain, depth buffer, render pass
       Pipelines.js    bind group layouts + pipelines cached by composed
                       shader source and fixed-function state
+      DirectionalShadowMap.js renderer-owned shadow texture + depth pass
+      ShadowPipelines.js vertex-only shadow pipeline cache
       GpuResources.js lazy caches: vertex/index/uniform buffers, bind groups
       Uniforms.js     named CPU/WGSL layouts + 3D frame-uniform writer
     cameras/
@@ -98,6 +100,7 @@ src/
       shared.js       uniform structs, lighting and color-space helpers
       vertexStages.js regular + instanced vertex stages
       fragments.js    reusable material fragment stages
+      shadows.js      regular + instanced directional depth shader
       vertexLayout.js matching GPU vertex attribute descriptors
     materials/
       Material.js     material options + shader-stage composition
@@ -107,6 +110,7 @@ src/
                       surface color
     lights/
       DirectionalLight.js
+      DirectionalShadow.js shadow-map and orthographic-camera settings
       AmbientLight.js
       PointLight.js   a lamp: radiates from its scene-graph position,
                       fading with distance (up to 4 per scene)
@@ -189,6 +193,43 @@ function frame() {
 requestAnimationFrame(frame);
 ```
 
+## Directional shadows
+
+Shadow mapping is opt-in on both the light and each mesh, so adding a light
+does not silently add another render pass. Continuing the scene above (with
+`PlaneGeometry` added to its imports):
+
+```js
+const sun = new DirectionalLight([1, 1, 1], 1);
+sun.direction.set(-1, -2, -1); // direction the light travels
+sun.castShadow = true;
+sun.shadow.mapSize = 1024;
+sun.shadow.bias = 0.001;
+sun.shadow.normalBias = 0.02;
+sun.shadow.camera.size = 8;    // half-height of the square covered area
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.far = 30;
+sun.shadow.camera.lookAt(0, 0, 0); // center the covered area
+scene.add(sun);
+
+cube.castShadow = true;
+cube.receiveShadow = true;
+
+const ground = new Mesh(
+  new PlaneGeometry(10, 10),
+  new LambertMaterial({ color: [0.4, 0.4, 0.4] }),
+);
+ground.receiveShadow = true;
+scene.add(ground);
+```
+
+The first visible `DirectionalLight` is the scene's sun and the only light that
+can own the directional shadow map. Its camera bounds are fixed in world space;
+move the camera target or increase `size`/`far` when casters fall outside them.
+Opaque regular and instanced triangle meshes can cast. Line, point and
+transparent materials are skipped by the shadow pass; lit transparent meshes
+may still receive shadows.
+
 ## Minimal 2D usage
 
 ```js
@@ -233,27 +274,29 @@ One `renderer.render(scene, camera)` call, start to finish:
    each object ends up with an up-to-date `worldMatrix`.
 2. `camera.updateMatrices()` rebuilds the projection and view matrices
    and their product, the view-projection matrix.
-3. The frame uniforms — the view-projection matrix plus the lights found
-   by a scene traversal — are written into the `@group(0)` uniform
-   buffer.
-4. A single render pass begins, clearing the color target and the
-   depth buffer. By default both are 4x multisampled and the color
-   resolves to the canvas when the pass ends (`antialias: false`
-   renders straight to the canvas instead).
-5. The scene is traversed and visible meshes are collected (an object
-   with `visible = false` is skipped along with its whole subtree —
-   hiding a group hides everything in it): opaque ones
-   draw first in scene order, then transparent ones
-   (`material.transparent`) draw back-to-front by view-space depth —
-   the 3D counterpart of the 2D `zIndex` sort. For each mesh:
+3. Visible meshes are collected, transparent meshes are sorted, and their
+   geometry, instance data and object uniforms are prepared before any pass
+   reads them. An object with `visible = false` is skipped along with its
+   whole subtree.
+4. The frame uniforms — the view-projection matrix plus the lights found
+   by a scene traversal — are written into the `@group(0)` uniform buffer.
+5. When directional shadows are enabled, a single-sample depth-only pass
+   renders the opted-in opaque triangle casters into the light's shadow map.
+   The map is still cleared when there are no visible casters, preventing
+   stale shadows.
+6. The color pass clears its color and depth targets. By default both are 4x
+   multisampled and color resolves to the canvas when the pass ends
+   (`antialias: false` renders straight to the canvas instead). Opaque meshes
+   draw first in scene order, then transparent meshes draw back-to-front by
+   view-space depth — the 3D counterpart of the 2D `zIndex` sort. For each:
    - `GpuResources` hands back the geometry's vertex/index buffers, the
      mesh's uniform buffer + bind group, and the material's pipeline
      (from `Pipelines`) — each created on first use and cached after;
-   - the model matrix, normal matrix and color are written into the
-     mesh's `@group(1)` uniform buffer;
+   - the already-prepared model matrix, normal matrix, color and shadow
+     receiver flag are read from the mesh's `@group(1)` uniform buffer;
    - the pass sets the pipeline, bind group and buffers, and issues one
      `drawIndexed` (with the instance count for an `InstancedMesh`).
-6. The pass ends and the command buffer is submitted to the GPU queue.
+7. The pass ends and both passes are submitted in one command buffer.
 
 `Renderer2d` follows the same shape minus the depth buffer: visible
 shapes are collected, sorted by `zIndex`, and drawn back-to-front with
@@ -274,19 +317,25 @@ alpha blending on.
   was resized by the other one. Sharing is intended for alternating 2D/3D
   scenes; each `render()` starts with a clear, so it is not an overlay/compositor
   API.
-- **Uniforms** are split into two bind groups, matching the declarations in
-  `3d/shaders/shared.js` (and its 2D counterpart):
+- **3D uniforms and sampled shadows** use three bind groups, matching the
+  declarations in `3d/shaders/shared.js` (the 2D counterpart uses the first
+  two):
   - `@group(0)` _frame_ uniforms — view-projection matrix, light direction/color,
     ambient color, and up to `MAX_POINT_LIGHTS` (4) point lights (world
     position + color). Written once per frame.
-  - `@group(1)` _object_ uniforms — model matrix, normal matrix, color. Each
-    mesh gets its own small uniform buffer and bind group (created lazily on
+  - `@group(1)` _object_ uniforms — model matrix, normal matrix, color and
+    shadow receiver flag. Each mesh gets its own small uniform buffer and bind
+    group (created lazily on
     first draw). Materials that declare `usesMap: true` use a second layout
     that adds the texture view and sampler to the same group. This declaration
     is independent of the current `map` value, so swapping a resource cannot
     accidentally change the shader's pipeline layout. Custom material classes
     should pass it explicitly; when omitted, it is inferred once from the
     initial `map` for compatibility.
+  - `@group(2)` _directional shadow_ resources — light view-projection
+    matrix, bias settings, sampled depth texture and comparison sampler.
+    The color pass always binds it; when shadows are disabled a tiny fallback
+    map and an `enabled = 0` flag keep every material on one stable layout.
 - **Pipelines** are compiled once per composed shader + pipeline state
   (primitive topology, culling, textured / instanced / transparent or
   not) and cached, so materials producing the same WGSL reuse the same
@@ -323,8 +372,9 @@ alpha blending on.
   with one `drawIndexed` — thousands of objects for a couple of draw calls.
   Instance revisions keep every renderer synchronized and guarantee that a
   buffer recreated after `dispose()` is populated before drawing.
-- **render()** updates world matrices, writes the uniforms, records a single
-  render pass with a `depth24plus` depth attachment, and submits it. With
+- **render()** updates world matrices, writes the uniforms, optionally records
+  a single-sample `depth32float` directional shadow pass, records the color
+  pass with a `depth24plus` depth attachment, and submits them together. With
   the default `antialias: true`, the pass draws into 4x multisampled
   color/depth targets and resolves to the swap chain — the sample count is
   baked into every cached pipeline.
@@ -347,8 +397,9 @@ npm run test:webgpu
 ```
 
 It compiles every stock regular/instanced WGSL module, renders the 2D and 3D
-material, texture, transparency and topology variants through both 1x and 4x
-pipelines, checks WebGPU error scopes and uncaptured errors, exercises shared
+material, texture, transparency, topology and directional-shadow variants
+through both 1x and 4x pipelines, checks WebGPU error scopes and uncaptured
+errors, exercises shared
 renderer resizing/disposal, and reads known pixels back through a GPU buffer.
 The command reports a skip when no browser or WebGPU adapter is available; set
 `MICRO_GL_REQUIRE_WEBGPU=1` in CI to turn that into a failure.
@@ -359,7 +410,9 @@ array of additional launch flags when a CI GPU setup needs them.
 
 ## Deliberate limitations (it's _micro_)
 
-- One directional light, up to four point lights, and ambient; no shadows.
+- One directional light (and one fixed-bounds directional shadow map), up to
+  four point lights, and ambient. Shadow casting is limited to opaque triangle
+  meshes; there are no point-light, transparent or alpha-cutout shadows.
 - Cameras orient via `lookAt` target, not via their `rotation` Euler angles.
 - Transparent meshes sort back-to-front by their origin's depth, not per
   triangle, so intersecting or nested transparent meshes can blend in the
@@ -368,4 +421,5 @@ array of additional launch flags when a CI GPU setup needs them.
   shader uses the instance matrix directly instead of its inverse
   transpose).
 
-The natural next step if you want to grow it: shadow mapping.
+The natural next step if you want to grow it: frustum culling and broader
+material/shadow models.

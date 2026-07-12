@@ -44,6 +44,7 @@ export class Pipelines {
       createMaterialPipelineLayouts(
         device,
         GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        { shadows: true },
       ),
     );
   }

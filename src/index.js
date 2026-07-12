@@ -41,6 +41,7 @@ export { LambertMaterial } from './3d/materials/LambertMaterial.js';
 export { TextureMaterial } from './3d/materials/TextureMaterial.js';
 
 export { DirectionalLight } from './3d/lights/DirectionalLight.js';
+export { DirectionalShadow } from './3d/lights/DirectionalShadow.js';
 export { AmbientLight } from './3d/lights/AmbientLight.js';
 export { PointLight } from './3d/lights/PointLight.js';
 

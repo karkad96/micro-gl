@@ -1,5 +1,6 @@
 import { Object3d } from '../core/Object3d.js';
 import { Vec3 } from '../../math/Vec3.js';
+import { DirectionalShadow } from './DirectionalShadow.js';
 
 /**
  * A light that shines in one direction from infinitely far away,
@@ -17,5 +18,9 @@ export class DirectionalLight extends Object3d {
     this.intensity = intensity;
     /** The direction the light travels in (it gets normalized by the renderer). */
     this.direction = new Vec3(-1, -1, -1);
+    /** Enable the renderer's directional shadow pass for this light. */
+    this.castShadow = false;
+    /** Shadow-map resolution, bias and orthographic camera configuration. */
+    this.shadow = new DirectionalShadow();
   }
 }
