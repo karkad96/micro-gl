@@ -9,6 +9,7 @@ import { BoxGeometry } from '../src/3d/geometries/BoxGeometry.js';
 import { VERTEX_SIZE } from '../src/3d/geometries/Geometry.js';
 import { CircleGeometry } from '../src/2d/geometries/CircleGeometry.js';
 import { RectGeometry } from '../src/2d/geometries/RectGeometry.js';
+import { Renderer } from '../src/3d/core/Renderer.js';
 
 const EPS = 1e-5;
 
@@ -148,6 +149,30 @@ test('dispose() destroys per-object GPU buffers and forgets them', () => {
   object.dispose();
   assert.equal(destroyed, 2);
   assert.equal(object._gpu, null);
+});
+
+test('Renderer.dispose destroys the device only when it owns it', () => {
+  const gpuStubs = (destroyed) => ({
+    _frameUniformBuffer: { destroy: () => destroyed.push('uniforms') },
+    _depthTexture: { destroy: () => destroyed.push('depth') },
+    device: { destroy: () => destroyed.push('device') },
+    context: { unconfigure: () => destroyed.push('context') },
+  });
+
+  // Sharing another renderer's device: release own buffers, not the device.
+  const shared = new Renderer({});
+  const sharedDestroyed = [];
+  Object.assign(shared, gpuStubs(sharedDestroyed), { _ownsDevice: false });
+  shared.dispose();
+  assert.deepEqual(sharedDestroyed, ['uniforms', 'depth']);
+  assert.equal(shared.device, null);
+
+  // Owning the device: release it (and the canvas configuration) too.
+  const owner = new Renderer({});
+  const ownerDestroyed = [];
+  Object.assign(owner, gpuStubs(ownerDestroyed), { _ownsDevice: true });
+  owner.dispose();
+  assert.deepEqual(ownerDestroyed, ['uniforms', 'depth', 'context', 'device']);
 });
 
 test('BoxGeometry has 24 vertices, 36 indices and exact bounds', () => {
