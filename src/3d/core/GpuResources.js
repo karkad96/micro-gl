@@ -31,6 +31,8 @@ export class GpuResources {
     this._objectGpuResourceRefs = new Set();
     // The renderer builds its per-frame bind group against this layout.
     this.frameBindGroupLayout = this.pipelines.frameBindGroupLayout;
+    this.objectBindGroupLayout = this.pipelines.objectBindGroupLayout;
+    this.shadowBindGroupLayout = this.pipelines.shadowBindGroupLayout;
   }
 
   /** The render pipeline for a material + pipeline state — see Pipelines. */
@@ -101,11 +103,21 @@ export class GpuResources {
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         }),
         bindGroup: null,
+        shadowBindGroup: null,
         mapGpu: null, // the uploaded texture the bind group samples
         data: new Float32Array(
           OBJECT_UNIFORM_SIZE / Float32Array.BYTES_PER_ELEMENT,
         ),
       };
+      gpu.shadowBindGroup = this.device.createBindGroup({
+        layout: this.pipelines.objectBindGroupLayout,
+        entries: [
+          {
+            binding: SHADER_BINDING.uniforms,
+            resource: { buffer: gpu.uniformBuffer },
+          },
+        ],
+      });
       if (mesh.isInstanced) {
         gpu.instanceBuffer = this.device.createBuffer({
           size: mesh.instanceData.byteLength,

@@ -2,6 +2,7 @@ import { Mesh } from './Mesh.js';
 import { Mat4 } from '../../math/Mat4.js';
 import { srgbToLinear } from '../../math/color.js';
 import { GpuResources } from './GpuResources.js';
+import { DirectionalShadowMap } from './DirectionalShadowMap.js';
 import {
   FRAME_UNIFORM_SIZE,
   FrameUniformWriter,
@@ -27,6 +28,7 @@ import {
   SHADER_BIND_GROUP,
   SHADER_BINDING,
   VERTEX_BUFFER_SLOT,
+  isTriangleTopology,
 } from '../../core/pipelineConstants.js';
 
 /**
@@ -56,6 +58,8 @@ export class Renderer {
     this.format = null;
     /** How many objects the last render() call drew. */
     this.drawCount = 0;
+    /** How many caster instances the last directional shadow pass drew. */
+    this.shadowDrawCount = 0;
 
     this._autoResize = autoResize;
     this._sampleCount = antialias
@@ -67,6 +71,7 @@ export class Renderer {
     this._initPromise = null;
     this._initVersion = 0;
     this._resources = null;
+    this._shadowMap = null;
     this._depthTexture = null;
     this._depthView = null;
     this._msaaTexture = null;
@@ -75,6 +80,8 @@ export class Renderer {
     this._targetHeight = 0;
     this._opaqueList = [];
     this._transparentList = [];
+    this._shadowCasters = [];
+    this._preparedMeshes = new Map();
     this._frameUniformWriter = new FrameUniformWriter();
     this._normalMatrix = new Mat4();
   }
@@ -139,6 +146,11 @@ export class Renderer {
         this.device,
         this.format,
         this._sampleCount,
+      );
+      this._shadowMap = new DirectionalShadowMap(
+        this.device,
+        this._resources.shadowBindGroupLayout,
+        this._resources.objectBindGroupLayout,
       );
 
       this._frameUniformBuffer = this.device.createBuffer({
@@ -238,12 +250,19 @@ export class Renderer {
     scene.updateWorldMatrix();
     camera.updateMatrices();
 
-    this._writeFrameUniforms(scene, camera);
     this._collectMeshes(scene, camera);
+    this._prepareMeshes();
+    const directionalLight = this._writeFrameUniforms(scene, camera);
+    this._shadowMap.update(directionalLight);
 
     const encoder = this.device.createCommandEncoder();
+    this.shadowDrawCount = this._shadowMap.render(
+      encoder,
+      this._shadowCasters,
+    );
     const pass = this._beginRenderPass(encoder, scene.background);
     pass.setBindGroup(SHADER_BIND_GROUP.frame, this._frameBindGroup);
+    pass.setBindGroup(SHADER_BIND_GROUP.shadow, this._shadowMap.bindGroup);
     for (const mesh of this._opaqueList) this._drawMesh(pass, mesh);
     for (const mesh of this._transparentList) this._drawMesh(pass, mesh);
 
@@ -290,7 +309,7 @@ export class Renderer {
   }
 
   _writeFrameUniforms(scene, camera) {
-    this._frameUniformWriter.write(
+    return this._frameUniformWriter.write(
       scene,
       camera,
       this.device,
@@ -316,6 +335,7 @@ export class Renderer {
     if (this._frameUniformBuffer) this._frameUniformBuffer.destroy();
     if (this._depthTexture) this._depthTexture.destroy();
     if (this._msaaTexture) this._msaaTexture.destroy();
+    if (this._shadowMap) this._shadowMap.dispose();
     if (this._resources) this._resources.dispose();
     this._frameUniformBuffer = null;
     this._depthTexture = null;
@@ -334,19 +354,47 @@ export class Renderer {
     this.format = null;
     this._frameBindGroup = null;
     this._resources = null;
+    this._shadowMap = null;
     this._opaqueList.length = 0;
     this._transparentList.length = 0;
+    this._shadowCasters.length = 0;
+    this._preparedMeshes.clear();
+    this.drawCount = 0;
+    this.shadowDrawCount = 0;
     this._ownsDevice = false;
   }
 
   _drawMesh(pass, mesh) {
+    const { geometryGPU, meshGPU } = this._preparedMeshes.get(mesh);
     const instanced = !!mesh.isInstanced;
-    const geometryGPU = this._resources.geometryFor(mesh.geometry);
-    const meshGPU = this._resources.meshFor(mesh);
     const pipeline = this._resources.pipelineFor(mesh.material, instanced);
 
-    // Per-object uniforms: model matrix, normal matrix, color.
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(SHADER_BIND_GROUP.object, meshGPU.bindGroup);
+    pass.setVertexBuffer(
+      VERTEX_BUFFER_SLOT.geometry,
+      geometryGPU.vertexBuffer,
+    );
+    if (instanced) {
+      pass.setVertexBuffer(VERTEX_BUFFER_SLOT.instance, meshGPU.instanceBuffer);
+    }
+    pass.setIndexBuffer(geometryGPU.indexBuffer, INDEX_FORMAT);
+    pass.drawIndexed(mesh.geometry.indexCount, instanced ? mesh.count : 1);
+  }
+
+  /** Uploads object/instance data before either render pass reads it. */
+  _prepareMeshes() {
+    this._preparedMeshes.clear();
+    this._shadowCasters.length = 0;
+    for (const mesh of this._opaqueList) this._prepareMesh(mesh);
+    for (const mesh of this._transparentList) this._prepareMesh(mesh);
+  }
+
+  _prepareMesh(mesh) {
+    const geometryGPU = this._resources.geometryFor(mesh.geometry);
+    const meshGPU = this._resources.meshFor(mesh);
     const data = meshGPU.data;
+
     data.set(mesh.worldMatrix.elements, OBJECT_UNIFORM_OFFSET.modelMatrix);
     this._normalMatrix.copy(mesh.worldMatrix);
     if (this._normalMatrix.tryInvert()) {
@@ -360,24 +408,25 @@ export class Renderer {
       this._normalMatrix.elements,
       OBJECT_UNIFORM_OFFSET.normalMatrix,
     );
+
     const color = mesh.material.color;
     const colorOffset = OBJECT_UNIFORM_OFFSET.color;
     data[colorOffset] = srgbToLinear(color[0]);
     data[colorOffset + 1] = srgbToLinear(color[1]);
     data[colorOffset + 2] = srgbToLinear(color[2]);
     data[colorOffset + 3] = color.length > 3 ? color[3] : 1;
+    data.fill(0, OBJECT_UNIFORM_OFFSET.shadowFlags);
+    data[OBJECT_UNIFORM_OFFSET.shadowFlags] = mesh.receiveShadow ? 1 : 0;
     this.device.queue.writeBuffer(meshGPU.uniformBuffer, 0, data);
 
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(SHADER_BIND_GROUP.object, meshGPU.bindGroup);
-    pass.setVertexBuffer(
-      VERTEX_BUFFER_SLOT.geometry,
-      geometryGPU.vertexBuffer,
-    );
-    if (instanced) {
-      pass.setVertexBuffer(VERTEX_BUFFER_SLOT.instance, meshGPU.instanceBuffer);
+    const prepared = { mesh, geometryGPU, meshGPU };
+    this._preparedMeshes.set(mesh, prepared);
+    if (
+      mesh.castShadow &&
+      !mesh.material.transparent &&
+      isTriangleTopology(mesh.material.topology)
+    ) {
+      this._shadowCasters.push(prepared);
     }
-    pass.setIndexBuffer(geometryGPU.indexBuffer, INDEX_FORMAT);
-    pass.drawIndexed(mesh.geometry.indexCount, instanced ? mesh.count : 1);
   }
 }

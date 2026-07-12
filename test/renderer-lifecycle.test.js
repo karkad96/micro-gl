@@ -5,7 +5,7 @@ import { Renderer2d } from '../src/2d/core/Renderer2d.js';
 import { acquireDeviceLease } from '../src/core/deviceLease.js';
 import { initWebGpu } from '../src/core/initWebGpu.js';
 
-globalThis.GPUTextureUsage ??= { RENDER_ATTACHMENT: 1 };
+globalThis.GPUTextureUsage ??= { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2 };
 globalThis.GPUBufferUsage ??= { UNIFORM: 1, COPY_DST: 2 };
 globalThis.GPUShaderStage ??= { VERTEX: 1, FRAGMENT: 2 };
 
@@ -118,7 +118,7 @@ test('a raw WebGPU setup cannot be shared with a different canvas', () => {
 function initializationDevice(events = []) {
   return {
     lost: new Promise(() => {}),
-    queue: {},
+    queue: { writeBuffer() {} },
     createBindGroupLayout: (descriptor) => ({ descriptor }),
     createPipelineLayout: (descriptor) => ({ descriptor }),
     createBuffer: (descriptor) => ({
@@ -126,6 +126,8 @@ function initializationDevice(events = []) {
       destroy: () => events.push('buffer'),
     }),
     createBindGroup: (descriptor) => ({ descriptor }),
+    createSampler: (descriptor) => ({ descriptor }),
+    createShaderModule: (descriptor) => ({ descriptor }),
     createTexture: (descriptor) => ({
       descriptor,
       createView() {

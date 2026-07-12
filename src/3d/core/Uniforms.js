@@ -17,12 +17,13 @@ export const FRAME_UNIFORM_SIZE =
   (FRAME_HEADER_FLOATS + MAX_POINT_LIGHTS * POINT_LIGHT_FLOATS) * FLOAT_BYTES;
 
 export const OBJECT_UNIFORM_SIZE =
-  (2 * MAT4_FLOATS + VEC4_FLOATS) * FLOAT_BYTES;
+  (2 * MAT4_FLOATS + 2 * VEC4_FLOATS) * FLOAT_BYTES;
 
 export const OBJECT_UNIFORM_OFFSET = Object.freeze({
   modelMatrix: 0,
   normalMatrix: MAT4_FLOATS,
   color: 2 * MAT4_FLOATS,
+  shadowFlags: 2 * MAT4_FLOATS + VEC4_FLOATS,
 });
 
 const FRAME_OFFSET = Object.freeze({
@@ -73,6 +74,7 @@ export class FrameUniformWriter {
     );
     this._writeDirectionalLight(directionalLight);
     device.queue.writeBuffer(buffer, 0, data);
+    return directionalLight;
   }
 
   _writePointLight(index, light) {

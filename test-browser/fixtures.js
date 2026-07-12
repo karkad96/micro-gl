@@ -11,8 +11,11 @@ import {
   InstancedMesh,
   InstancedShape2d,
   LambertMaterial,
+  Mat4,
   Mesh,
+  OrthographicCamera,
   PerspectiveCamera,
+  PlaneGeometry,
   PointLight,
   RectGeometry,
   Scene,
@@ -60,6 +63,9 @@ export function create3dPipelineFixture(texture) {
   scene.add(new AmbientLight([0.3, 0.35, 0.45], 0.35));
   const sun = new DirectionalLight([1, 0.95, 0.85], 1);
   sun.direction.set(-1, -2, -1);
+  sun.castShadow = true;
+  sun.shadow.mapSize = 128;
+  sun.shadow.camera.size = 6;
   scene.add(sun);
   for (let i = 0; i < 4; i++) {
     const light = new PointLight([0.3 + i * 0.15, 0.5, 1], 0.8);
@@ -106,10 +112,15 @@ export function create3dPipelineFixture(texture) {
   ];
 
   for (const { geometry, create } of materialCases) {
-    add(new Mesh(geometry, create(false)));
+    const opaqueMesh = new Mesh(geometry, create(false));
+    opaqueMesh.castShadow = true;
+    opaqueMesh.receiveShadow = true;
+    add(opaqueMesh);
     add(new Mesh(geometry, create(true)));
 
     const opaqueInstances = new InstancedMesh(geometry, create(false), 2);
+    opaqueInstances.castShadow = true;
+    opaqueInstances.receiveShadow = true;
     opaqueInstances.setColorAt(0, [1, 0.8, 0.6]);
     opaqueInstances.setColorAt(1, [0.6, 0.8, 1]);
     add(opaqueInstances);
@@ -127,16 +138,16 @@ export function create3dPipelineFixture(texture) {
   const grid = new GridHelper(1, 2, [0.7, 0.75, 0.9]);
   geometries.add(grid.geometry);
   add(grid);
-  add(
-    new Mesh(
-      stripGeometry,
-      new BasicMaterial({
-        topology: 'triangle-strip',
-        cullMode: 'front',
-        frontFace: 'cw',
-      }),
-    ),
+  const stripMesh = new Mesh(
+    stripGeometry,
+    new BasicMaterial({
+      topology: 'triangle-strip',
+      cullMode: 'front',
+      frontFace: 'cw',
+    }),
   );
+  stripMesh.castShadow = true;
+  add(stripMesh);
   add(
     new Mesh(
       stripGeometry,
@@ -162,6 +173,8 @@ export function create3dPipelineFixture(texture) {
     expectedDrawCount: 22,
     expectedPipelineCount: 16,
     expectedShaderModuleCount: 6,
+    expectedShadowDrawCount: 10,
+    expectedShadowPipelineCount: 3,
   };
 }
 
@@ -243,6 +256,68 @@ export function create3dPixelFixture() {
     camera,
     geometries: new Set([geometry]),
     objects: scene.children,
+  };
+}
+
+/** A top-down scene with stable lit and shadowed ground sample points. */
+export function create3dShadowPixelFixture() {
+  const groundGeometry = new PlaneGeometry(6, 6);
+  const casterGeometry = new BoxGeometry(0.6, 2, 0.6);
+  const scene = new Scene();
+  scene.background = [0, 0, 0, 1];
+
+  const ground = new Mesh(
+    groundGeometry,
+    new LambertMaterial({ color: [1, 1, 1, 1] }),
+  );
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const caster = new Mesh(
+    casterGeometry,
+    new LambertMaterial({ color: [0.75, 0.8, 0.9, 1] }),
+  );
+  caster.position.set(0, 1, 0);
+  caster.castShadow = true;
+  scene.add(caster);
+
+  const instances = new InstancedMesh(
+    casterGeometry,
+    new LambertMaterial({ color: [0.7, 0.8, 1, 1] }),
+    2,
+  );
+  instances.castShadow = true;
+  const instanceMatrix = new Mat4();
+  instances.setMatrixAt(0, instanceMatrix.makeTranslation(-1.5, 1, -1.3));
+  instances.setMatrixAt(1, instanceMatrix.makeTranslation(-1.5, 1, 1.3));
+  scene.add(instances);
+
+  scene.add(new AmbientLight([1, 1, 1], 0.12));
+  const sun = new DirectionalLight([1, 1, 1], 1);
+  sun.direction.set(1, -2, 0);
+  sun.castShadow = true;
+  sun.shadow.mapSize = 256;
+  sun.shadow.bias = 0.001;
+  sun.shadow.normalBias = 0.01;
+  sun.shadow.camera.size = 3.2;
+  sun.shadow.camera.near = 0.1;
+  sun.shadow.camera.far = 20;
+  sun.shadow.camera.lookAt(0, 0, 0);
+  scene.add(sun);
+
+  const camera = new OrthographicCamera(3, 1, 0.1, 20);
+  camera.position.set(0, 8, 0);
+  camera.up.set(0, 0, -1);
+  camera.lookAt(0, 0, 0);
+
+  return {
+    scene,
+    camera,
+    geometries: new Set([groundGeometry, casterGeometry]),
+    objects: [ground, caster, instances],
+    expectedShadowDrawCount: 3,
+    shadowSample: [0.64, 0.5],
+    litSample: [0.25, 0.5],
   };
 }
 

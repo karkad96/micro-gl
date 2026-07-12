@@ -16,6 +16,7 @@ import {
  * Every shader shares the same uniform interface:
  *   @group(0) — per-frame data (camera + lights), owned by the renderer
  *   @group(1) — per-object data (transforms + color)
+ *   @group(2) — renderer-owned directional shadow map and uniforms
  * The renderer caches pipelines by composed WGSL source and pipeline state,
  * so materials with the same shader share one pipeline while custom material
  * instances may still provide different fragment stages safely.

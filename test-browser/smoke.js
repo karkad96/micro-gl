@@ -13,6 +13,7 @@ import {
   create2dPixelFixture,
   create3dPipelineFixture,
   create3dPixelFixture,
+  create3dShadowPixelFixture,
   createCheckerTexture,
   disposeFixture,
 } from './fixtures.js';
@@ -48,6 +49,7 @@ async function runSmokeTest() {
   let fixture3d = null;
   let fixture2d = null;
   let pixelFixture3d = null;
+  let shadowPixelFixture3d = null;
   let pixelFixture2d = null;
   const renderers = [];
   const checks = [];
@@ -74,6 +76,7 @@ async function runSmokeTest() {
     fixture3d = create3dPipelineFixture(texture);
     fixture2d = create2dPipelineFixture(texture);
     pixelFixture3d = create3dPixelFixture();
+    shadowPixelFixture3d = create3dShadowPixelFixture();
     pixelFixture2d = create2dPixelFixture();
 
     const msaa3d = new Renderer(canvas, { antialias: true });
@@ -153,6 +156,8 @@ async function runSmokeTest() {
 
     let redPixel;
     let greenPixel;
+    let litGroundPixel;
+    let shadowedGroundPixel;
     await gpuPhase(device, 'known-pixel rendering', async () => {
       msaa3d.render(pixelFixture3d.scene, pixelFixture3d.camera);
       redPixel = await readCenterPixel(
@@ -176,6 +181,49 @@ async function runSmokeTest() {
     });
     pass(checks, 'read back known red 3D and green 2D pixels');
 
+    await gpuPhase(device, 'directional shadow pixel rendering', async () => {
+      msaa3d.render(
+        shadowPixelFixture3d.scene,
+        shadowPixelFixture3d.camera,
+      );
+      shadowedGroundPixel = await readPixel(
+        device,
+        gpu.context,
+        gpu.format,
+        canvas.width,
+        canvas.height,
+        ...shadowPixelFixture3d.shadowSample,
+      );
+
+      // Render again before the second asynchronous readback so the canvas's
+      // current swap texture is guaranteed to contain this fixture.
+      msaa3d.render(
+        shadowPixelFixture3d.scene,
+        shadowPixelFixture3d.camera,
+      );
+      litGroundPixel = await readPixel(
+        device,
+        gpu.context,
+        gpu.format,
+        canvas.width,
+        canvas.height,
+        ...shadowPixelFixture3d.litSample,
+      );
+
+      assert(
+        msaa3d.shadowDrawCount ===
+          shadowPixelFixture3d.expectedShadowDrawCount,
+        `directional shadow fixture: expected shadowDrawCount ` +
+          `${shadowPixelFixture3d.expectedShadowDrawCount}, received ` +
+          `${msaa3d.shadowDrawCount}`,
+      );
+      assertShadowContrast(shadowedGroundPixel, litGroundPixel);
+    });
+    pass(
+      checks,
+      'rendered regular/instanced directional casters and read back their shadow',
+    );
+
     await gpuPhase(device, 'shared renderer lifetime', async () => {
       msaa3d.dispose();
       msaa2d.render(pixelFixture2d.scene, pixelFixture2d.camera);
@@ -197,13 +245,19 @@ async function runSmokeTest() {
       checks,
       warnings,
       pipelineReports,
-      pixels: { red3d: redPixel, green2d: greenPixel },
+      pixels: {
+        red3d: redPixel,
+        green2d: greenPixel,
+        litGround3d: litGroundPixel,
+        shadowedGround3d: shadowedGroundPixel,
+      },
     };
   } finally {
     for (const renderer of renderers) renderer.dispose();
     if (fixture3d) disposeFixture(fixture3d);
     if (fixture2d) disposeFixture(fixture2d);
     if (pixelFixture3d) disposeFixture(pixelFixture3d);
+    if (shadowPixelFixture3d) disposeFixture(shadowPixelFixture3d);
     if (pixelFixture2d) disposeFixture(pixelFixture2d);
     if (texture) texture.dispose();
     if (gpu) {
@@ -233,6 +287,21 @@ function renderFixture(renderer, fixture, label, checks) {
     `${label}: expected ${fixture.expectedShaderModuleCount} shader modules, ` +
       `received ${pipelines._modules.size}`,
   );
+  let shadowPipelineCount = 0;
+  if (fixture.expectedShadowDrawCount !== undefined) {
+    assert(
+      renderer.shadowDrawCount === fixture.expectedShadowDrawCount,
+      `${label}: expected shadowDrawCount ` +
+        `${fixture.expectedShadowDrawCount}, received ` +
+        `${renderer.shadowDrawCount}`,
+    );
+    shadowPipelineCount = renderer._shadowMap._pipelines._cache.size;
+    assert(
+      shadowPipelineCount === fixture.expectedShadowPipelineCount,
+      `${label}: expected ${fixture.expectedShadowPipelineCount} shadow ` +
+        `pipelines, received ${shadowPipelineCount}`,
+    );
+  }
   pass(
     checks,
     `${label} rendered ${renderer.drawCount} objects through ` +
@@ -242,6 +311,8 @@ function renderFixture(renderer, fixture, label, checks) {
     drawCount: renderer.drawCount,
     pipelineCount,
     shaderModuleCount: pipelines._modules.size,
+    shadowDrawCount: renderer.shadowDrawCount || 0,
+    shadowPipelineCount,
   };
 }
 
@@ -307,6 +378,18 @@ async function gpuPhase(device, label, operation) {
 }
 
 async function readCenterPixel(device, context, format, width, height) {
+  return readPixel(device, context, format, width, height, 0.5, 0.5);
+}
+
+async function readPixel(
+  device,
+  context,
+  format,
+  width,
+  height,
+  normalizedX,
+  normalizedY,
+) {
   const bytesPerRow = 256;
   const readback = device.createBuffer({
     label: 'micro-gl smoke-test pixel readback',
@@ -321,8 +404,8 @@ async function readCenterPixel(device, context, format, width, height) {
       {
         texture: context.getCurrentTexture(),
         origin: {
-          x: Math.floor(width / 2),
-          y: Math.floor(height / 2),
+          x: normalizedPixelCoordinate(normalizedX, width),
+          y: normalizedPixelCoordinate(normalizedY, height),
         },
       },
       { buffer: readback, bytesPerRow },
@@ -341,12 +424,31 @@ async function readCenterPixel(device, context, format, width, height) {
   }
 }
 
+function normalizedPixelCoordinate(value, size) {
+  return Math.min(size - 1, Math.max(0, Math.floor(value * size)));
+}
+
 function assertDominantColor(pixel, channel, label) {
   const competing = pixel.filter((_, index) => index < 3 && index !== channel);
   assert(
     pixel[channel] >= 160 && competing.every((value) => value <= 80),
     `${label}: received rgba(${pixel.join(', ')})`,
   );
+}
+
+function assertShadowContrast(shadowedPixel, litPixel) {
+  const shadowLuminance = luminance(shadowedPixel);
+  const litLuminance = luminance(litPixel);
+  assert(
+    litLuminance >= 180 && shadowLuminance <= litLuminance * 0.7,
+    `directional shadow contrast: shadow rgba(${shadowedPixel.join(', ')}) ` +
+      `has luminance ${shadowLuminance.toFixed(1)}, lit rgba(` +
+      `${litPixel.join(', ')}) has luminance ${litLuminance.toFixed(1)}`,
+  );
+}
+
+function luminance(pixel) {
+  return pixel[0] * 0.2126 + pixel[1] * 0.7152 + pixel[2] * 0.0722;
 }
 
 function adapterDescription(device) {

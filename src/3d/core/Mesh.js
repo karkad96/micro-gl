@@ -9,6 +9,10 @@ export class Mesh extends Object3d {
     super();
     this.geometry = geometry;
     this.material = material;
+    /** Whether this mesh is drawn into an enabled directional shadow map. */
+    this.castShadow = false;
+    /** Whether lit materials on this mesh are darkened by that shadow map. */
+    this.receiveShadow = false;
     /** View-space depth, written by the renderer's transparent sort. */
     this._viewDepth = 0;
   }
