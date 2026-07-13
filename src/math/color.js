@@ -7,8 +7,8 @@
  * light and instance colors, 0..1 — are sRGB display values, the same
  * values you would type into a CSS color. The renderer decodes them to
  * linear before uploading, all shading happens in linear space, and
- * the fragment shaders encode the result back to sRGB for the swap
- * chain (see linearToSrgb in Material / Material2d's WGSL).
+ * the sRGB render attachment encodes the result for the swap chain after
+ * linear-space blending and multisample resolve.
  */
 export function srgbToLinear(c) {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;

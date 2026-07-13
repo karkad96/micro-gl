@@ -102,7 +102,7 @@ src/
       WireframeGeometry.js  the unique edges of any triangle geometry,
                       for drawing with a line-list material
     shaders/
-      shared.js       uniform structs, lighting and color-space helpers
+      shared.js       uniform structs and lighting helpers
       vertexStages.js regular + instanced vertex stages
       fragments.js    reusable material fragment stages
       shadows.js      regular + instanced directional depth shader
@@ -423,11 +423,14 @@ alpha blending on.
   with a tiny render pass — `generateMipmaps.js`) and get a sampler from
   the Texture's settings. Image textures upload as `rgba8unorm-srgb`, so
   sampling and mip filtering happen in linear space.
-- **Color space**: the colors you author (material, light and instance
-  colors) are sRGB display values. The renderer decodes them to linear
-  (`srgbToLinear`), all shading happens in linear space, and every
-  fragment shader encodes the result back to sRGB at the end — unlit
-  colors round-trip exactly, lit and textured surfaces shade correctly.
+- **Color space**: the colors you author (material, light, instance and
+  scene background colors) are sRGB display values. The renderer decodes them
+  to linear (`srgbToLinear`), all shading happens in linear space, and
+  fragment shaders write linear RGB to an sRGB canvas attachment. The
+  attachment performs the final encoding after alpha blending and MSAA resolve,
+  so unlit colors round-trip exactly while lighting, textures, transparency and
+  antialiased edges are all combined in the correct color space. Custom
+  fragment shaders must likewise return linear RGB.
 - **Instancing**: an `InstancedMesh` packs per-instance transform + color
   into a second, instance-stepped vertex buffer and draws all instances
   with one `drawIndexed` — thousands of objects for a couple of draw calls.

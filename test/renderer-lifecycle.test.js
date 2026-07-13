@@ -4,10 +4,18 @@ import { Renderer } from '../src/3d/core/Renderer.js';
 import { Renderer2d } from '../src/2d/core/Renderer2d.js';
 import { acquireDeviceLease } from '../src/core/deviceLease.js';
 import { initWebGpu } from '../src/core/initWebGpu.js';
+import { srgbColorFormat } from '../src/core/rendererConfig.js';
+import { srgbToLinear } from '../src/math/color.js';
 
 globalThis.GPUTextureUsage ??= { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2 };
 globalThis.GPUBufferUsage ??= { UNIFORM: 1, COPY_DST: 2 };
 globalThis.GPUShaderStage ??= { VERTEX: 1, FRAGMENT: 2 };
+
+test('preferred canvas formats map to compatible sRGB color views', () => {
+  assert.equal(srgbColorFormat('bgra8unorm'), 'bgra8unorm-srgb');
+  assert.equal(srgbColorFormat('rgba8unorm'), 'rgba8unorm-srgb');
+  assert.throws(() => srgbColorFormat('rgba16float'), /Unsupported canvas/);
+});
 
 function attachmentDevice(created) {
   return {
@@ -15,7 +23,7 @@ function attachmentDevice(created) {
       const texture = {
         descriptor,
         destroyed: false,
-        createView: () => ({ texture }),
+        createView: (viewDescriptor = {}) => ({ texture, viewDescriptor }),
         destroy: () => (texture.destroyed = true),
       };
       created.push(texture);
@@ -30,6 +38,7 @@ test('3D attachments follow a canvas resized by another shared renderer', () => 
   const created = [];
   renderer.device = attachmentDevice(created);
   renderer.format = 'bgra8unorm';
+  renderer.colorFormat = 'bgra8unorm-srgb';
 
   renderer._ensureRenderTargets();
   assert.equal(created.length, 2); // depth + MSAA color
@@ -43,6 +52,7 @@ test('3D attachments follow a canvas resized by another shared renderer', () => 
   assert.ok(oldTargets.every((texture) => texture.destroyed));
   assert.deepEqual(created[2].descriptor.size, [240, 160]);
   assert.deepEqual(created[3].descriptor.size, [240, 160]);
+  assert.equal(created[3].descriptor.format, 'bgra8unorm-srgb');
 });
 
 test('2D MSAA follows a canvas resized by another shared renderer', () => {
@@ -51,6 +61,7 @@ test('2D MSAA follows a canvas resized by another shared renderer', () => {
   const created = [];
   renderer.device = attachmentDevice(created);
   renderer.format = 'bgra8unorm';
+  renderer.colorFormat = 'bgra8unorm-srgb';
 
   renderer._ensureRenderTargets();
   const oldTarget = created[0];
@@ -61,6 +72,42 @@ test('2D MSAA follows a canvas resized by another shared renderer', () => {
   assert.equal(created.length, 2);
   assert.equal(oldTarget.destroyed, true);
   assert.deepEqual(created[1].descriptor.size, [240, 160]);
+  assert.equal(created[1].descriptor.format, 'bgra8unorm-srgb');
+});
+
+test('both renderers use sRGB swap views and linearized clear colors', () => {
+  for (const RendererClass of [Renderer, Renderer2d]) {
+    let viewDescriptor;
+    let passDescriptor;
+    const renderer = new RendererClass({});
+    renderer.colorFormat = 'bgra8unorm-srgb';
+    renderer.context = {
+      getCurrentTexture: () => ({
+        createView(descriptor) {
+          viewDescriptor = descriptor;
+          return { descriptor };
+        },
+      }),
+    };
+    renderer._depthView = {};
+    renderer._beginRenderPass(
+      {
+        beginRenderPass(descriptor) {
+          passDescriptor = descriptor;
+          return {};
+        },
+      },
+      [0.5, 0.25, 0, 0.75],
+    );
+
+    assert.deepEqual(viewDescriptor, { format: 'bgra8unorm-srgb' });
+    assert.deepEqual(passDescriptor.colorAttachments[0].clearValue, [
+      srgbToLinear(0.5),
+      srgbToLinear(0.25),
+      0,
+      0.75,
+    ]);
+  }
 });
 
 test('shared device ownership transfers until the last renderer is disposed', () => {
@@ -70,6 +117,7 @@ test('shared device ownership transfers until the last renderer is disposed', ()
     device: { destroy: () => events.push('device') },
     context: { unconfigure: () => events.push('context') },
     format: 'bgra8unorm',
+    colorFormat: 'bgra8unorm-srgb',
   };
   const owner = new Renderer(canvas);
   Object.assign(owner, gpu);
@@ -88,7 +136,12 @@ test('shared device ownership transfers until the last renderer is disposed', ()
 });
 
 test('sharing a device across different canvases is rejected', () => {
-  const gpu = { device: {}, context: {}, format: 'bgra8unorm' };
+  const gpu = {
+    device: {},
+    context: {},
+    format: 'bgra8unorm',
+    colorFormat: 'bgra8unorm-srgb',
+  };
   const owner = new Renderer({});
   Object.assign(owner, gpu);
   acquireDeviceLease(owner, gpu);
@@ -106,12 +159,27 @@ test('a raw WebGPU setup cannot be shared with a different canvas', () => {
     device: {},
     context: {},
     format: 'bgra8unorm',
+    colorFormat: 'bgra8unorm-srgb',
     canvas: sourceCanvas,
   };
   const borrower = new Renderer2d({});
   assert.throws(
     () => acquireDeviceLease(borrower, gpu, gpu),
     /same canvas/,
+  );
+});
+
+test('a raw shared setup must declare its configured sRGB view format', () => {
+  const canvas = {};
+  const gpu = {
+    device: {},
+    context: {},
+    format: 'bgra8unorm',
+    canvas,
+  };
+  assert.throws(
+    () => acquireDeviceLease(new Renderer(canvas), gpu, gpu),
+    /sRGB colorFormat.*viewFormats/,
   );
 });
 
@@ -150,8 +218,12 @@ test('concurrent init calls share one adapter/device request', async () => {
   });
   let requests = 0;
   let configurations = 0;
+  let configuration;
   const context = {
-    configure: () => configurations++,
+    configure(descriptor) {
+      configurations++;
+      configuration = descriptor;
+    },
     unconfigure() {},
   };
   const device = initializationDevice();
@@ -182,6 +254,10 @@ test('concurrent init calls share one adapter/device request', async () => {
     releaseAdapter();
     assert.deepEqual(await Promise.all([first, second]), [renderer, renderer]);
     assert.equal(configurations, 1);
+    assert.equal(configuration.format, 'bgra8unorm');
+    assert.deepEqual(configuration.viewFormats, ['bgra8unorm-srgb']);
+    assert.equal(renderer.format, 'bgra8unorm');
+    assert.equal(renderer.colorFormat, 'bgra8unorm-srgb');
     renderer.dispose();
   } finally {
     if (originalNavigator) {
@@ -203,6 +279,7 @@ test('failed shared initialization rolls back device-lease membership', async ()
     device,
     context: { unconfigure: () => events.push('context') },
     format: 'bgra8unorm',
+    colorFormat: 'bgra8unorm-srgb',
   };
   const owner = new Renderer(canvas);
   Object.assign(owner, gpu);
@@ -225,6 +302,7 @@ test('concurrent shared init calls are coalesced too', async () => {
     device,
     context: { unconfigure() {} },
     format: 'bgra8unorm',
+    colorFormat: 'bgra8unorm-srgb',
   };
   const owner = new Renderer(canvas);
   Object.assign(owner, gpu);
@@ -246,6 +324,7 @@ test('disposing during shared init rejects instead of fulfilling unusably', asyn
     device,
     context: { unconfigure() {} },
     format: 'bgra8unorm',
+    colorFormat: 'bgra8unorm-srgb',
   };
   const owner = new Renderer(canvas);
   Object.assign(owner, gpu);

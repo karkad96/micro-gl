@@ -11,6 +11,8 @@ import {
   InstancedMesh,
   InstancedShape2d,
   LambertMaterial,
+  Material,
+  Material2d,
   Mat4,
   Mesh,
   OrthographicCamera,
@@ -423,6 +425,49 @@ export function create2dPixelFixture() {
   };
 }
 
+/** White at 50% alpha over black should encode linear 0.5 as sRGB ~0.735. */
+export function create3dTransparencyFixture() {
+  return createCentered3dFixture(
+    new BasicMaterial({ color: [1, 1, 1, 0.5], transparent: true }),
+  );
+}
+
+/** The 2D equivalent of create3dTransparencyFixture. */
+export function create2dTransparencyFixture() {
+  return createCentered2dFixture(
+    new BasicMaterial2d({ color: [1, 1, 1, 0.5] }),
+  );
+}
+
+/** Emits white from two MSAA samples and black from the other two. */
+export function create3dMsaaResolveFixture() {
+  return createCentered3dFixture(new SampleIndexMaterial());
+}
+
+/** The 2D equivalent of create3dMsaaResolveFixture. */
+export function create2dMsaaResolveFixture() {
+  return createCentered2dFixture(new SampleIndexMaterial2d());
+}
+
+/** Authored sRGB gray must round-trip without being encoded twice. */
+export function create2dOpaqueGrayFixture() {
+  return createCentered2dFixture(
+    new BasicMaterial2d({ color: [0.5, 0.5, 0.5, 1] }),
+  );
+}
+
+/** An sRGB clear is decoded before the sRGB attachment writes it. */
+export function create2dGrayClearFixture() {
+  const scene = new Scene2d();
+  scene.background = [0.5, 0.5, 0.5, 1];
+  return {
+    scene,
+    camera: new Camera2d(2, 1),
+    geometries: new Set(),
+    objects: [],
+  };
+}
+
 export function disposeFixture(fixture) {
   fixture.scene.dispose();
   for (const geometry of fixture.geometries) geometry.dispose();
@@ -431,6 +476,55 @@ export function disposeFixture(fixture) {
 function rememberGeometry(geometries, geometry) {
   geometries.add(geometry);
   return geometry;
+}
+
+const SAMPLE_INDEX_FRAGMENT_SHADER = /* wgsl */ `
+@fragment
+fn fs(@builtin(sample_index) sampleIndex: u32) -> @location(0) vec4f {
+  let value = select(0.0, 1.0, sampleIndex < 2u);
+  return vec4f(value, value, value, 1.0);
+}
+`;
+
+class SampleIndexMaterial extends Material {
+  get fragmentShader() {
+    return SAMPLE_INDEX_FRAGMENT_SHADER;
+  }
+}
+
+class SampleIndexMaterial2d extends Material2d {
+  get fragmentShader() {
+    return SAMPLE_INDEX_FRAGMENT_SHADER;
+  }
+}
+
+function createCentered3dFixture(material) {
+  const geometry = new BoxGeometry(1.8, 1.8, 1.8);
+  const scene = new Scene();
+  scene.background = [0, 0, 0, 1];
+  scene.add(new Mesh(geometry, material));
+  const camera = new PerspectiveCamera(55, 1, 0.1, 10);
+  camera.position.set(0, 0, 3);
+  camera.lookAt(0, 0, 0);
+  return {
+    scene,
+    camera,
+    geometries: new Set([geometry]),
+    objects: scene.children,
+  };
+}
+
+function createCentered2dFixture(material) {
+  const geometry = new RectGeometry(3, 3);
+  const scene = new Scene2d();
+  scene.background = [0, 0, 0, 1];
+  scene.add(new Shape2d(geometry, material));
+  return {
+    scene,
+    camera: new Camera2d(2, 1),
+    geometries: new Set([geometry]),
+    objects: scene.children,
+  };
 }
 
 function create3dTopologyGeometry() {

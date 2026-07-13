@@ -6,8 +6,7 @@ import {
 export const BASIC_FRAGMENT_SHADER_2D = /* wgsl */ `
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
-  let base = objectColor(input);
-  return vec4f(linearToSrgb(base.rgb), base.a);
+  return objectColor(input);
 }
 `;
 
@@ -19,7 +18,6 @@ var uMapSampler: sampler;
 
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
-  let base = textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
-  return vec4f(linearToSrgb(base.rgb), base.a);
+  return textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
 }
 `;

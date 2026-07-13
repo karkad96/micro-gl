@@ -13,6 +13,7 @@ import {
   SINGLE_SAMPLE_COUNT,
   colorAttachment,
   drawingBufferSize,
+  linearClearColor,
 } from '../../core/rendererConfig.js';
 import {
   acquireDeviceLease,
@@ -56,7 +57,10 @@ export class Renderer2d {
     this.canvas = canvas;
     this.device = null;
     this.context = null;
+    /** Preferred non-sRGB format used to configure the canvas context. */
     this.format = null;
+    /** Compatible sRGB view format used by color render passes. */
+    this.colorFormat = null;
     /** How many shapes the last render() call drew. */
     this.drawCount = 0;
 
@@ -82,7 +86,8 @@ export class Renderer2d {
    * awaited before rendering. Pass another already-initialized renderer
    * on the same canvas as `shared` to reuse its GPU device.
    *
-   * @param {{device, context, format}} [shared]
+   * @param {{device, context, format, colorFormat}} [shared] another renderer,
+   *   or an initWebGpu() result whose canvas viewFormats remain configured
    */
   async init(shared) {
     // Coalesce overlapping calls so one canvas is never configured with two
@@ -131,10 +136,11 @@ export class Renderer2d {
       this.device = lease.device;
       this.context = lease.context;
       this.format = lease.format;
+      this.colorFormat = lease.colorFormat;
 
       this._resources = new GpuResources2d(
         this.device,
-        this.format,
+        this.colorFormat,
         this._sampleCount,
       );
 
@@ -203,7 +209,7 @@ export class Renderer2d {
       // to the swap chain texture at the end of every render pass.
       this._msaaTexture = this.device.createTexture({
         size: [this.canvas.width, this.canvas.height],
-        format: this.format,
+        format: this.colorFormat,
         sampleCount: this._sampleCount,
         usage: GPUTextureUsage.RENDER_ATTACHMENT,
       });
@@ -261,9 +267,17 @@ export class Renderer2d {
   }
 
   _beginRenderPass(encoder, background) {
-    const swapView = this.context.getCurrentTexture().createView();
+    const swapView = this.context
+      .getCurrentTexture()
+      .createView({ format: this.colorFormat });
     return encoder.beginRenderPass({
-      colorAttachments: [colorAttachment(this._msaaView, swapView, background)],
+      colorAttachments: [
+        colorAttachment(
+          this._msaaView,
+          swapView,
+          linearClearColor(background),
+        ),
+      ],
     });
   }
 
@@ -298,6 +312,7 @@ export class Renderer2d {
     this.device = null;
     this.context = null;
     this.format = null;
+    this.colorFormat = null;
     this._frameBindGroup = null;
     this._resources = null;
     this._drawList.length = 0;
@@ -314,8 +329,8 @@ export class Renderer2d {
     const data = shapeGPU.data;
     data.set(shape.worldMatrix.elements, OBJECT_UNIFORM_OFFSET_2D.transform);
     const color = shape.material.color;
-    // Colors are authored in sRGB; the shader shades in linear space
-    // and encodes back at the end.
+    // Colors are authored in sRGB; shaders and attachment blending use linear
+    // values, then the sRGB color target encodes the stored canvas pixels.
     const colorOffset = OBJECT_UNIFORM_OFFSET_2D.color;
     data[colorOffset] = srgbToLinear(color[0]);
     data[colorOffset + 1] = srgbToLinear(color[1]);

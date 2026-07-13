@@ -10,11 +10,17 @@ import {
 } from '../src/index.js';
 import {
   create2dPipelineFixture,
+  create2dGrayClearFixture,
+  create2dMsaaResolveFixture,
+  create2dOpaqueGrayFixture,
   create2dPixelFixture,
+  create2dTransparencyFixture,
   create3dFrustumCullingFixture,
+  create3dMsaaResolveFixture,
   create3dPipelineFixture,
   create3dPixelFixture,
   create3dShadowPixelFixture,
+  create3dTransparencyFixture,
   createCheckerTexture,
   disposeFixture,
 } from './fixtures.js';
@@ -53,6 +59,12 @@ async function runSmokeTest() {
   let frustumFixture3d = null;
   let shadowPixelFixture3d = null;
   let pixelFixture2d = null;
+  let transparencyFixture3d = null;
+  let transparencyFixture2d = null;
+  let msaaResolveFixture3d = null;
+  let msaaResolveFixture2d = null;
+  let opaqueGrayFixture2d = null;
+  let grayClearFixture2d = null;
   const renderers = [];
   const checks = [];
   const warnings = [];
@@ -81,6 +93,12 @@ async function runSmokeTest() {
     frustumFixture3d = create3dFrustumCullingFixture();
     shadowPixelFixture3d = create3dShadowPixelFixture();
     pixelFixture2d = create2dPixelFixture();
+    transparencyFixture3d = create3dTransparencyFixture();
+    transparencyFixture2d = create2dTransparencyFixture();
+    msaaResolveFixture3d = create3dMsaaResolveFixture();
+    msaaResolveFixture2d = create2dMsaaResolveFixture();
+    opaqueGrayFixture2d = create2dOpaqueGrayFixture();
+    grayClearFixture2d = create2dGrayClearFixture();
 
     const msaa3d = new Renderer(canvas, { antialias: true });
     const msaa2d = new Renderer2d(canvas, { antialias: true });
@@ -93,6 +111,7 @@ async function runSmokeTest() {
       gpu.context.configure({
         device,
         format: gpu.format,
+        viewFormats: [gpu.colorFormat],
         alphaMode: 'opaque',
         usage:
           GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
@@ -212,6 +231,82 @@ async function runSmokeTest() {
     });
     pass(checks, 'read back known red 3D and green 2D pixels');
 
+    const transparencyPixels = {};
+    const msaaResolvePixels = {};
+    let opaqueGrayPixel;
+    let grayClearPixel;
+    await gpuPhase(device, 'linear color compositing', async () => {
+      for (const [key, label, renderer, fixture] of [
+        [
+          'singleSample3d',
+          '1x 3D transparency',
+          singleSample3d,
+          transparencyFixture3d,
+        ],
+        [
+          'singleSample2d',
+          '1x 2D transparency',
+          singleSample2d,
+          transparencyFixture2d,
+        ],
+        ['msaa3d', '4x 3D transparency', msaa3d, transparencyFixture3d],
+        ['msaa2d', '4x 2D transparency', msaa2d, transparencyFixture2d],
+      ]) {
+        renderer.render(fixture.scene, fixture.camera);
+        const pixel = await readCenterPixel(
+          device,
+          gpu.context,
+          gpu.format,
+          canvas.width,
+          canvas.height,
+        );
+        assertGrayPixel(pixel, 188, label);
+        transparencyPixels[key] = pixel;
+      }
+
+      for (const [key, label, renderer, fixture] of [
+        ['msaa3d', '4x 3D resolve', msaa3d, msaaResolveFixture3d],
+        ['msaa2d', '4x 2D resolve', msaa2d, msaaResolveFixture2d],
+      ]) {
+        renderer.render(fixture.scene, fixture.camera);
+        const pixel = await readCenterPixel(
+          device,
+          gpu.context,
+          gpu.format,
+          canvas.width,
+          canvas.height,
+        );
+        assertGrayPixel(pixel, 188, label);
+        msaaResolvePixels[key] = pixel;
+      }
+
+      singleSample2d.render(
+        opaqueGrayFixture2d.scene,
+        opaqueGrayFixture2d.camera,
+      );
+      opaqueGrayPixel = await readCenterPixel(
+        device,
+        gpu.context,
+        gpu.format,
+        canvas.width,
+        canvas.height,
+      );
+      assertGrayPixel(opaqueGrayPixel, 128, 'authored sRGB gray');
+
+      singleSample2d.render(grayClearFixture2d.scene, grayClearFixture2d.camera);
+      grayClearPixel = await readCenterPixel(
+        device,
+        gpu.context,
+        gpu.format,
+        canvas.width,
+        canvas.height,
+      );
+      assertGrayPixel(grayClearPixel, 128, 'sRGB background clear');
+    });
+    pass(checks, 'blended 1x/4x 2D/3D transparency in linear space');
+    pass(checks, 'resolved 4x 2D/3D multisampling in linear space');
+    pass(checks, 'round-tripped authored and clear sRGB gray');
+
     await gpuPhase(device, 'directional shadow pixel rendering', async () => {
       msaa3d.render(
         shadowPixelFixture3d.scene,
@@ -280,6 +375,10 @@ async function runSmokeTest() {
       pixels: {
         red3d: redPixel,
         green2d: greenPixel,
+        transparency: transparencyPixels,
+        msaaResolve: msaaResolvePixels,
+        opaqueGray2d: opaqueGrayPixel,
+        grayClear2d: grayClearPixel,
         litGround3d: litGroundPixel,
         shadowedGround3d: shadowedGroundPixel,
       },
@@ -292,6 +391,12 @@ async function runSmokeTest() {
     if (frustumFixture3d) disposeFixture(frustumFixture3d);
     if (shadowPixelFixture3d) disposeFixture(shadowPixelFixture3d);
     if (pixelFixture2d) disposeFixture(pixelFixture2d);
+    if (transparencyFixture3d) disposeFixture(transparencyFixture3d);
+    if (transparencyFixture2d) disposeFixture(transparencyFixture2d);
+    if (msaaResolveFixture3d) disposeFixture(msaaResolveFixture3d);
+    if (msaaResolveFixture2d) disposeFixture(msaaResolveFixture2d);
+    if (opaqueGrayFixture2d) disposeFixture(opaqueGrayFixture2d);
+    if (grayClearFixture2d) disposeFixture(grayClearFixture2d);
     if (texture) texture.dispose();
     if (gpu) {
       gpu.context.unconfigure();
@@ -533,6 +638,18 @@ function assertDominantColor(pixel, channel, label) {
   assert(
     pixel[channel] >= 160 && competing.every((value) => value <= 80),
     `${label}: received rgba(${pixel.join(', ')})`,
+  );
+}
+
+function assertGrayPixel(pixel, expected, label, tolerance = 4) {
+  const rgbMatches = pixel
+    .slice(0, 3)
+    .every((value) => Math.abs(value - expected) <= tolerance);
+  assert(
+    rgbMatches && pixel[3] >= 250,
+    `${label}: expected rgba(${expected}±${tolerance}, ` +
+      `${expected}±${tolerance}, ${expected}±${tolerance}, 255), received ` +
+      `rgba(${pixel.join(', ')})`,
   );
 }
 

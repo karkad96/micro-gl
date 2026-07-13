@@ -6,8 +6,7 @@ import {
 export const BASIC_FRAGMENT_SHADER = /* wgsl */ `
 @fragment
 fn fs(input: VertexOut) -> @location(0) vec4f {
-  let base = objectColor(input);
-  return vec4f(linearToSrgb(base.rgb), base.a);
+  return objectColor(input);
 }
 `;
 
@@ -16,7 +15,7 @@ export const LAMBERT_FRAGMENT_SHADER = /* wgsl */ `
 fn fs(input: VertexOut) -> @location(0) vec4f {
   let base = objectColor(input);
   let lighting = diffuseLighting(normalize(input.worldNormal), input.worldPosition);
-  return vec4f(linearToSrgb(base.rgb * lighting), base.a);
+  return vec4f(base.rgb * lighting, base.a);
 }
 `;
 
@@ -30,6 +29,6 @@ var uMapSampler: sampler;
 fn fs(input: VertexOut) -> @location(0) vec4f {
   let base = textureSample(uMap, uMapSampler, input.uv) * objectColor(input);
   let lighting = diffuseLighting(normalize(input.worldNormal), input.worldPosition);
-  return vec4f(linearToSrgb(base.rgb * lighting), base.a);
+  return vec4f(base.rgb * lighting, base.a);
 }
 `;

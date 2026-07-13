@@ -13,6 +13,12 @@ export function acquireDeviceLease(renderer, gpu, shared = null) {
   if (!gpu?.device || !gpu.context || !gpu.format) {
     throw new Error('The shared renderer must be initialized before it is used');
   }
+  if (!gpu.colorFormat) {
+    throw new Error(
+      'Shared WebGPU setups must provide an sRGB colorFormat configured in ' +
+        'the canvas context viewFormats',
+    );
+  }
 
   if (shared?._deviceLease) {
     const lease = shared._deviceLease;
@@ -27,6 +33,7 @@ export function acquireDeviceLease(renderer, gpu, shared = null) {
     device: gpu.device,
     context: gpu.context,
     format: gpu.format,
+    colorFormat: gpu.colorFormat,
     canvas: renderer.canvas,
     managed,
     members: new Set([renderer]),

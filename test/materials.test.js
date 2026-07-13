@@ -89,6 +89,18 @@ test('2D materials compose extracted vertex and fragment shader stages', () => {
   assert.equal(Material2d.INSTANCED_WGSL, INSTANCED_SHAPE_SHADER_PREFIX);
 });
 
+test('stock fragment stages leave display encoding to the sRGB target', () => {
+  for (const shader of [
+    BASIC_FRAGMENT_SHADER,
+    LAMBERT_FRAGMENT_SHADER,
+    TEXTURE_FRAGMENT_SHADER,
+    BASIC_FRAGMENT_SHADER_2D,
+    SPRITE_FRAGMENT_SHADER_2D,
+  ]) {
+    assert.doesNotMatch(shader, /linearToSrgb/);
+  }
+});
+
 test('legacy shader-prefix fields remain live customization points', () => {
   const original = {
     shared3d: Material.SHARED_WGSL,
@@ -218,6 +230,27 @@ test('the renderer sample count is baked into every 2D pipeline', () => {
   const pipelines = new Pipelines2d(capturingDevice(captured), 'bgra8unorm', 4);
   pipelines.pipelineFor(new BasicMaterial2d());
   assert.equal(captured[0].multisample.count, 4);
+});
+
+test('2D and 3D pipelines target their sRGB attachment format', () => {
+  const captured3d = [];
+  const captured2d = [];
+  new Pipelines(capturingDevice(captured3d), 'bgra8unorm-srgb').pipelineFor(
+    new BasicMaterial(),
+  );
+  new Pipelines2d(
+    capturingDevice(captured2d),
+    'bgra8unorm-srgb',
+  ).pipelineFor(new BasicMaterial2d());
+
+  assert.equal(
+    captured3d[0].fragment.targets[0].format,
+    'bgra8unorm-srgb',
+  );
+  assert.equal(
+    captured2d[0].fragment.targets[0].format,
+    'bgra8unorm-srgb',
+  );
 });
 
 test('textured layouts declare uniform, texture and sampler bindings', () => {
