@@ -1,12 +1,25 @@
 import { Vec3 } from '../../math/Vec3.js';
 import { Mat4 } from '../../math/Mat4.js';
+import {
+  DEFAULT_PRIMITIVE_TOPOLOGY,
+  isTriangleTopology,
+} from '../../core/pipelineConstants.js';
+import { INSTANCE_SIZE } from '../constants.js';
 import { Mesh } from './Mesh.js';
+import { copyAffineInstanceMatrix } from './InstanceMatrix.js';
+import {
+  intersectIndexedGeometry,
+  intersectsBounds,
+} from './RayIntersection.js';
 
 const _invVP = new Mat4();
 const _invWorld = new Mat4();
+const _instanceMatrix = new Mat4();
+const _combinedMatrix = new Mat4();
 const _localOrigin = new Vec3();
-const _localEnd = new Vec3();
+const _localDirection = new Vec3();
 const _farPoint = new Vec3();
+const _worldDirection = new Vec3();
 
 const DIRECTION_EPSILON = 1e-12;
 
@@ -19,9 +32,9 @@ function isVisibleInHierarchy(object) {
 
 /**
  * Casts a ray from the camera through a screen point and finds which
- * meshes it hits. Intersection uses each geometry's local-space bounding
- * box (transformed by the mesh's world matrix), which is exact for boxes
- * and a close fit for the other primitives.
+ * indexed triangle surfaces it hits. Local bounds provide a fast broad
+ * phase; triangle tests determine the final hit. Instanced meshes are tested
+ * one transform at a time and report the matching `instanceId`.
  *
  * Matrices must be up to date, i.e. the scene must have been rendered
  * (the renderer updates them every frame).
@@ -80,18 +93,27 @@ export class Raycaster {
 
   /**
    * Intersects the ray with an array of objects (meshes and/or scene-graph
-   * subtrees). Returns hits as `{ object, point, distance }`, nearest first.
+   * subtrees). Returns the nearest surface hit per mesh or per instance as
+   * `{ object, point, distance }`, globally sorted nearest first. Instanced
+   * hits additionally contain a zero-based `instanceId`.
    */
   intersectObjects(objects) {
     const hits = [];
+    if (!prepareRay(this, _worldDirection)) return hits;
+    const visitedMeshes = new Set();
+
     for (const root of objects) {
       // Callers commonly pass pickable children directly, so account for
       // invisible ancestors outside the traversed subtree as well.
       if (!isVisibleInHierarchy(root)) continue;
       root.traverseVisible((object) => {
-        if (object instanceof Mesh && object.geometry) {
-          const hit = this._intersectMesh(object);
-          if (hit) hits.push(hit);
+        if (
+          object instanceof Mesh &&
+          object.geometry &&
+          !visitedMeshes.has(object)
+        ) {
+          visitedMeshes.add(object);
+          this._appendMeshHits(object, hits);
         }
       });
     }
@@ -99,84 +121,126 @@ export class Raycaster {
     return hits;
   }
 
-  _intersectMesh(mesh) {
-    const directionLength = this.direction.length();
-    const validMaxDistance =
-      this.maxDistance === Infinity ||
-      (Number.isFinite(this.maxDistance) && this.maxDistance >= 0);
-    if (
-      !Number.isFinite(this.origin.x) ||
-      !Number.isFinite(this.origin.y) ||
-      !Number.isFinite(this.origin.z) ||
-      !Number.isFinite(directionLength) ||
-      directionLength <= DIRECTION_EPSILON ||
-      !validMaxDistance ||
-      !_invWorld.copy(mesh.worldMatrix).tryInvert()
-    ) {
-      return null;
+  _appendMeshHits(mesh, hits) {
+    const topology =
+      mesh.material?.topology ?? DEFAULT_PRIMITIVE_TOPOLOGY;
+    if (!isTriangleTopology(topology)) return;
+
+    if (!mesh.isInstanced) {
+      const hit = this._intersectGeometry(mesh, mesh.worldMatrix, topology);
+      if (hit) hits.push(hit);
+      return;
     }
 
-    const directionX = this.direction.x / directionLength;
-    const directionY = this.direction.y / directionLength;
-    const directionZ = this.direction.z / directionLength;
-
-    // Transform the ray into the mesh's local space, where the bounding
-    // box is axis-aligned. The local direction is left unnormalized so
-    // `t` stays consistent between the two spaces.
-    _localOrigin.copy(this.origin).applyMat4(_invWorld);
-    _localEnd
-      .set(
-        this.origin.x + directionX,
-        this.origin.y + directionY,
-        this.origin.z + directionZ,
-      )
-      .applyMat4(_invWorld);
-    const dir = _localEnd.sub(_localOrigin);
-
+    const batchBounds = mesh.bounds;
     if (
-      !Number.isFinite(_localOrigin.x) ||
-      !Number.isFinite(_localOrigin.y) ||
-      !Number.isFinite(_localOrigin.z) ||
-      !Number.isFinite(dir.x) ||
-      !Number.isFinite(dir.y) ||
-      !Number.isFinite(dir.z)
+      batchBounds &&
+      !this._intersectsTransformedBounds(batchBounds, mesh.worldMatrix)
     ) {
-      return null;
+      return;
     }
 
-    const { min, max } = mesh.geometry.bounds;
-    const o = [_localOrigin.x, _localOrigin.y, _localOrigin.z];
-    const d = [dir.x, dir.y, dir.z];
-
-    // Slab test against the local AABB.
-    let tMin = -Infinity;
-    let tMax = Infinity;
-    for (let axis = 0; axis < min.length; axis++) {
-      if (Math.abs(d[axis]) < DIRECTION_EPSILON) {
-        if (o[axis] < min[axis] || o[axis] > max[axis]) return null;
+    const availableInstances = Math.floor(
+      (mesh.instanceData?.length || 0) / INSTANCE_SIZE,
+    );
+    const instanceCount = Number.isInteger(mesh.count)
+      ? Math.min(Math.max(mesh.count, 0), availableInstances)
+      : 0;
+    for (let instanceId = 0; instanceId < instanceCount; instanceId++) {
+      if (
+        !copyAffineInstanceMatrix(
+          mesh.instanceData,
+          instanceId,
+          _instanceMatrix,
+        )
+      ) {
         continue;
       }
-      let t1 = (min[axis] - o[axis]) / d[axis];
-      let t2 = (max[axis] - o[axis]) / d[axis];
-      if (t1 > t2) [t1, t2] = [t2, t1];
-      if (t1 > tMin) tMin = t1;
-      if (t2 < tMax) tMax = t2;
-      if (tMin > tMax) return null;
+      _combinedMatrix.multiplyMatrices(mesh.worldMatrix, _instanceMatrix);
+      const hit = this._intersectGeometry(mesh, _combinedMatrix, topology);
+      if (hit) {
+        hit.instanceId = instanceId;
+        hits.push(hit);
+      }
     }
-    if (tMax < 0) return null; // box is entirely behind the ray
-
-    // When the near-plane origin starts inside the box, use the exit face.
-    // Returning zero would put drag planes on the camera's near plane rather
-    // than at the visible surface of an enclosing object.
-    const t = tMin >= 0 ? tMin : tMax;
-    if (t > this.maxDistance) return null;
-    const point = new Vec3(
-      this.origin.x + directionX * t,
-      this.origin.y + directionY * t,
-      this.origin.z + directionZ * t,
-    );
-    // The local calculation used a normalized world direction, so `t` is a
-    // world-space distance even when callers supplied a scaled direction.
-    return { object: mesh, point, distance: t };
   }
+
+  _intersectGeometry(mesh, transform, topology) {
+    if (!this._transformRay(transform)) return null;
+
+    const distance = intersectIndexedGeometry(
+      _localOrigin,
+      _localDirection,
+      mesh.geometry,
+      topology,
+      this.maxDistance,
+    );
+    if (distance === null) return null;
+
+    const point = new Vec3(
+      this.origin.x + _worldDirection.x * distance,
+      this.origin.y + _worldDirection.y * distance,
+      this.origin.z + _worldDirection.z * distance,
+    );
+    return { object: mesh, point, distance };
+  }
+
+  _intersectsTransformedBounds(bounds, transform) {
+    return (
+      this._transformRay(transform) &&
+      intersectsBounds(
+        _localOrigin,
+        _localDirection,
+        bounds,
+        this.maxDistance,
+      )
+    );
+  }
+
+  _transformRay(transform) {
+    if (!_invWorld.copy(transform).tryInvert()) return false;
+
+    // Transform a unit world-ray step into local space. Leaving the resulting
+    // direction unnormalized keeps intersection distances in world units,
+    // including under rotated and non-uniformly scaled transforms.
+    _localOrigin.copy(this.origin).applyMat4(_invWorld);
+    _localDirection
+      .set(
+        this.origin.x + _worldDirection.x,
+        this.origin.y + _worldDirection.y,
+        this.origin.z + _worldDirection.z,
+      )
+      .applyMat4(_invWorld)
+      .sub(_localOrigin);
+
+    return (
+      Number.isFinite(_localOrigin.x) &&
+      Number.isFinite(_localOrigin.y) &&
+      Number.isFinite(_localOrigin.z) &&
+      Number.isFinite(_localDirection.x) &&
+      Number.isFinite(_localDirection.y) &&
+      Number.isFinite(_localDirection.z)
+    );
+  }
+}
+
+function prepareRay(raycaster, targetDirection) {
+  const directionLength = raycaster.direction.length();
+  const validMaxDistance =
+    raycaster.maxDistance === Infinity ||
+    (Number.isFinite(raycaster.maxDistance) && raycaster.maxDistance >= 0);
+  if (
+    !Number.isFinite(raycaster.origin.x) ||
+    !Number.isFinite(raycaster.origin.y) ||
+    !Number.isFinite(raycaster.origin.z) ||
+    !Number.isFinite(directionLength) ||
+    directionLength <= DIRECTION_EPSILON ||
+    !validMaxDistance
+  ) {
+    return false;
+  }
+  targetDirection
+    .copy(raycaster.direction)
+    .multiplyScalar(1 / directionLength);
+  return true;
 }

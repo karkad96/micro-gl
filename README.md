@@ -60,6 +60,7 @@ src/
     uploadTexture.js  caches one GPU texture/view/sampler per device
     generateMipmaps.js fills a texture's mip chain with a tiny render
                       pass per level (WebGPU has no built-in way)
+    indexedTriangles.js triangle-list/strip index traversal shared by CPU tools
     PointerControls.js the pointer/wheel/touch gesture plumbing shared by
                       the camera controls (subclasses provide the camera
                       math); touch: one-finger drag, two-finger pan,
@@ -73,8 +74,10 @@ src/
       Mesh.js         geometry + material
       InstancedMesh.js  a mesh drawn N times in one call, each instance
                       with its own transform + color
+      InstanceMatrix.js validates packed affine instance transforms
       InstancedBounds.js cached union bounds for an instanced batch
-      Raycaster.js    pointer picking via ray vs. bounding-box tests
+      RayIntersection.js ray/AABB broad phase + indexed-triangle tests
+      Raycaster.js    exact triangle-surface and per-instance picking
       Renderer.js     swap chain, depth buffer, render pass
       Pipelines.js    bind group layouts + pipelines cached by composed
                       shader source and fixed-function state
@@ -254,6 +257,35 @@ sets into several `InstancedMesh` objects for more precise culling. Direct
 matrix edits still require `mesh.needsUpdate = true`, which also refreshes the
 cached batch bound.
 
+## Accurate 3D picking
+
+`Raycaster` intersects the indexed triangle surfaces that the geometry
+describes; a geometry's bounding box is only a fast broad phase. This avoids
+selecting empty corners of spheres, concave meshes, or gaps between disconnected
+triangles. Triangle lists and triangle strips (including primitive restarts)
+are supported and picking is deliberately double-sided.
+
+```js
+const hits = new Raycaster()
+  .setFromCamera(pointerNdcX, pointerNdcY, camera)
+  .intersectObjects([scene]);
+
+const nearest = hits[0]; // { object, point, distance }
+```
+
+The nearest surface hit per mesh or per instance is returned, globally sorted
+nearest-first; crossed exit faces are not separate results. Distances stay in
+world units under parenting, rotation, negative scale, and non-uniform scale.
+`InstancedMesh` tests every affine instance transform independently; its hit
+records also have `instanceId`, while `object` remains the batch mesh.
+Consequently `DragControls` moves the whole batch after an instanced hit.
+
+World matrices and camera matrices must be current before picking, as before.
+Line and point topologies do not claim a filled surface hit; selecting them
+accurately requires an application-specific screen-space tolerance. CPU
+picking follows indexed geometry, not texture alpha or custom vertex-shader
+displacement.
+
 ## Minimal 2D usage
 
 ```js
@@ -382,7 +414,8 @@ alpha blending on.
   rendered on independent canvases/devices.
 - **Geometries** upload one interleaved vertex buffer (position, normal, uv —
   32-byte stride) and one 32-bit index buffer per device, lazily on first draw.
-  Their cached local bounding boxes drive raycasting and frustum culling.
+  Their cached local bounding boxes drive frustum culling and the raycasting
+  broad phase; indexed triangle tests determine exact picking hits.
   Edit `vertices`/`indices` in place and set `geometry.needsUpdate = true`; a
   revision counter ensures every device receives the edit (the arrays must
   keep their length).
@@ -401,6 +434,8 @@ alpha blending on.
   Instance revisions keep every renderer synchronized and guarantee that a
   buffer recreated after `dispose()` is populated before drawing. A separate
   bounds revision avoids rebuilding the batch bound after color-only edits.
+  Raycasting composes each instance transform with the mesh transform and
+  reports the matching `instanceId`.
 - **Frustum culling** extracts the six WebGPU clip planes once per camera and
   tests local bounding boxes through their world transforms without allocating
   corner vectors or inverting matrices. Invalid/custom bounds fail open rather
@@ -456,6 +491,9 @@ array of additional launch flags when a CI GPU setup needs them.
   transpose).
 - Instanced frustum culling is all-or-none per batch; it does not compact
   individual visible instances into a temporary GPU buffer.
+- CPU picking covers indexed triangle geometry and affine instances. It does
+  not evaluate texture alpha or custom vertex shaders, and line/point picking
+  needs an application-defined screen-space tolerance.
 
 The natural next step if you want to grow it: spatial partitioning and broader
 material/shadow models.

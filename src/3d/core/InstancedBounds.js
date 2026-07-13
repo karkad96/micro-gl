@@ -1,6 +1,5 @@
 import { INSTANCE_SIZE } from '../constants.js';
-
-const MATRIX_FLOATS = 16;
+import { isFiniteAffineInstanceMatrix } from './InstanceMatrix.js';
 
 /**
  * Builds the mesh-local AABB containing every `instanceMatrix * bounds`.
@@ -24,25 +23,20 @@ export function computeInstancedBounds(bounds, instanceData, count) {
 
   for (let instance = 0; instance < count; instance++) {
     const offset = instance * INSTANCE_SIZE;
-    if (!hasFiniteMatrix(instanceData, offset)) return null;
+    if (!isFiniteAffineInstanceMatrix(instanceData, offset)) return null;
 
     const m00 = instanceData[offset];
     const m10 = instanceData[offset + 1];
     const m20 = instanceData[offset + 2];
-    const m30 = instanceData[offset + 3];
     const m01 = instanceData[offset + 4];
     const m11 = instanceData[offset + 5];
     const m21 = instanceData[offset + 6];
-    const m31 = instanceData[offset + 7];
     const m02 = instanceData[offset + 8];
     const m12 = instanceData[offset + 9];
     const m22 = instanceData[offset + 10];
-    const m32 = instanceData[offset + 11];
     const m03 = instanceData[offset + 12];
     const m13 = instanceData[offset + 13];
     const m23 = instanceData[offset + 14];
-    const m33 = instanceData[offset + 15];
-    if (!isAffineMatrix(m30, m31, m32, m33)) return null;
 
     const transformedCenterX =
       m00 * centerX + m01 * centerY + m02 * centerZ + m03;
@@ -99,20 +93,6 @@ function hasFiniteBounds(min, max) {
     }
   }
   return true;
-}
-
-function hasFiniteMatrix(data, offset) {
-  for (let component = 0; component < MATRIX_FLOATS; component++) {
-    if (!Number.isFinite(data[offset + component])) return false;
-  }
-  return true;
-}
-
-function isAffineMatrix(m30, m31, m32, m33) {
-  // These values are exact for every affine Mat4 produced by the library.
-  // Even a tiny projective term can materially change coordinates after the
-  // homogeneous divide, so approximating it would risk a false cull.
-  return m30 === 0 && m31 === 0 && m32 === 0 && m33 === 1;
 }
 
 function expandBounds(

@@ -1,6 +1,9 @@
 import { Mesh } from './Mesh.js';
 import { srgbToLinear } from '../../math/color.js';
-import { INSTANCE_SIZE } from '../constants.js';
+import {
+  INSTANCE_COLOR_OFFSET,
+  INSTANCE_SIZE,
+} from '../constants.js';
 import { computeInstancedBounds } from './InstancedBounds.js';
 
 export { INSTANCE_SIZE } from '../constants.js';
@@ -20,9 +23,8 @@ export { INSTANCE_SIZE } from '../constants.js';
  * The instance count is fixed at construction. To show fewer instances,
  * scale the extras to zero; to grow, make a new InstancedMesh.
  *
- * Note: picking (Raycaster / DragControls) sees only the base
- * geometry's bounding box at the mesh's own transform, not the
- * individual instances.
+ * Raycaster tests every instance transform and includes `instanceId` in
+ * instanced hits. DragControls still moves the InstancedMesh as one batch.
  */
 export class InstancedMesh extends Mesh {
   constructor(geometry, material, count) {
@@ -37,7 +39,11 @@ export class InstancedMesh extends Mesh {
       this.instanceData[base + 5] = 1;
       this.instanceData[base + 10] = 1;
       this.instanceData[base + 15] = 1;
-      this.instanceData.fill(1, base + 16, base + 20);
+      this.instanceData.fill(
+        1,
+        base + INSTANCE_COLOR_OFFSET,
+        base + INSTANCE_SIZE,
+      );
     }
     // Resource caches compare revisions so every renderer/device receives
     // an edit, even after another renderer has cleared needsUpdate.
@@ -101,7 +107,7 @@ export class InstancedMesh extends Mesh {
    * values if you fill `instanceData` directly instead.
    */
   setColorAt(index, color) {
-    const base = index * INSTANCE_SIZE + 16;
+    const base = index * INSTANCE_SIZE + INSTANCE_COLOR_OFFSET;
     this.instanceData[base] = srgbToLinear(color[0]);
     this.instanceData[base + 1] = srgbToLinear(color[1]);
     this.instanceData[base + 2] = srgbToLinear(color[2]);
