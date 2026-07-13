@@ -47,7 +47,8 @@ export class Geometry {
 
   /**
    * Local-space axis-aligned bounding box `{ min, max }`, computed from
-   * the vertex positions on first access. Used for raycasting.
+   * the vertex positions on first access. Used as the raycasting broad phase
+   * and for frustum culling.
    */
   get bounds() {
     if (!this._bounds) {

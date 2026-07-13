@@ -8,6 +8,7 @@ import { Object2d } from '../src/2d/core/Object2d.js';
 import { Object3d } from '../src/3d/core/Object3d.js';
 import { Shape2d } from '../src/2d/core/Shape2d.js';
 import { Mesh } from '../src/3d/core/Mesh.js';
+import { InstancedMesh } from '../src/3d/core/InstancedMesh.js';
 import { Camera2d } from '../src/2d/cameras/Camera2d.js';
 import { PerspectiveCamera } from '../src/3d/cameras/PerspectiveCamera.js';
 import { DragControls2d } from '../src/2d/controls/DragControls2d.js';
@@ -218,6 +219,40 @@ test('3D dragging is owned by the pointer that started it', () => {
   element.dispatch('pointerup', pointer(1, 75));
   assert.ok(mesh.position.x > 0);
   assert.equal(ends, 1);
+  controls.dispose();
+});
+
+test('DragControls selects a translated instance without moving the batch', () => {
+  const camera = makePerspectiveCamera();
+  const instances = new InstancedMesh(new BoxGeometry(), {}, 1);
+  instances.setMatrixAt(0, new Mat4().makeTranslation(2, 0, 0));
+  instances.updateWorldMatrix();
+  const element = new FakeElement();
+  const controls = new DragControls([instances], camera, element);
+
+  assert.equal(
+    controls._pick(pointer(1)),
+    null,
+    'the empty base-mesh origin is not pickable',
+  );
+
+  const instanceCenterNdc = new Vec3(2, 0, 0).applyMat4(
+    camera.viewProjectionMatrix,
+  );
+  const event = pointer(
+    1,
+    (instanceCenterNdc.x + 1) * 50,
+    (1 - instanceCenterNdc.y) * 50,
+  );
+  element.dispatch('pointerdown', event);
+  assert.equal(controls.selected, instances);
+
+  element.dispatch('pointermove', event);
+  assertClose(instances.position.x, 0, 'batch x after stationary move:');
+  assertClose(instances.position.y, 0, 'batch y after stationary move:');
+  assertClose(instances.position.z, 0, 'batch z after stationary move:');
+
+  element.dispatch('pointerup', event);
   controls.dispose();
 });
 
