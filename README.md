@@ -40,6 +40,7 @@ src/
   math/               shared by both engines
     Vec3.js           3-component vector
     Mat4.js           column-major 4x4 matrix (perspective, invert, compose, ...)
+    Frustum.js        WebGPU clip planes + transformed bounding-box tests
     Vec2.js           2-component vector
     Mat3.js           3x3 affine transform, stored in the padded column
                       layout WGSL uses for mat3x3f uniforms
@@ -72,6 +73,7 @@ src/
       Mesh.js         geometry + material
       InstancedMesh.js  a mesh drawn N times in one call, each instance
                       with its own transform + color
+      InstancedBounds.js cached union bounds for an instanced batch
       Raycaster.js    pointer picking via ray vs. bounding-box tests
       Renderer.js     swap chain, depth buffer, render pass
       Pipelines.js    bind group layouts + pipelines cached by composed
@@ -230,6 +232,28 @@ Opaque regular and instanced triangle meshes can cast. Line, point and
 transparent materials are skipped by the shadow pass; lit transparent meshes
 may still receive shadows.
 
+## Frustum culling
+
+The 3D renderer automatically skips meshes whose transformed geometry bounds
+are completely outside the active camera. Shadow casters are tested separately
+against the directional light's camera, so an off-screen object can still cast
+a visible shadow. `drawCount` and `shadowDrawCount` report only the instances
+actually submitted to their respective passes.
+
+Set `mesh.frustumCulled = false` when a custom vertex shader moves vertices
+beyond `geometry.bounds`, or when a mesh must render regardless of the camera:
+
+```js
+mesh.frustumCulled = false;
+```
+
+An `InstancedMesh` is culled conservatively as one batch. Its cached bound is
+the union of every instance transform: if any instance may be visible, the
+whole fixed-count batch draws. Split very large, spatially separate instance
+sets into several `InstancedMesh` objects for more precise culling. Direct
+matrix edits still require `mesh.needsUpdate = true`, which also refreshes the
+cached batch bound.
+
 ## Minimal 2D usage
 
 ```js
@@ -274,17 +298,20 @@ One `renderer.render(scene, camera)` call, start to finish:
    each object ends up with an up-to-date `worldMatrix`.
 2. `camera.updateMatrices()` rebuilds the projection and view matrices
    and their product, the view-projection matrix.
-3. Visible meshes are collected, transparent meshes are sorted, and their
-   geometry, instance data and object uniforms are prepared before any pass
-   reads them. An object with `visible = false` is skipped along with its
-   whole subtree.
-4. The frame uniforms — the view-projection matrix plus the lights found
+3. The frame uniforms — the view-projection matrix plus the lights found
    by a scene traversal — are written into the `@group(0)` uniform buffer.
-5. When directional shadows are enabled, a single-sample depth-only pass
+4. The main camera's frustum and, when shadows are enabled, the directional
+   light camera's frustum are refreshed. One scene traversal independently
+   collects color-visible meshes and light-visible shadow casters. An object
+   with `visible = false` is skipped along with its whole subtree.
+5. The union of both lists has its geometry, instance data and object uniforms
+   prepared. Camera-culled objects that do not cast a visible shadow therefore
+   remain lazily unuploaded.
+6. When directional shadows are enabled, a single-sample depth-only pass
    renders the opted-in opaque triangle casters into the light's shadow map.
    The map is still cleared when there are no visible casters, preventing
    stale shadows.
-6. The color pass clears its color and depth targets. By default both are 4x
+7. The color pass clears its color and depth targets. By default both are 4x
    multisampled and color resolves to the canvas when the pass ends
    (`antialias: false` renders straight to the canvas instead). Opaque meshes
    draw first in scene order, then transparent meshes draw back-to-front by
@@ -296,7 +323,7 @@ One `renderer.render(scene, camera)` call, start to finish:
      receiver flag are read from the mesh's `@group(1)` uniform buffer;
    - the pass sets the pipeline, bind group and buffers, and issues one
      `drawIndexed` (with the instance count for an `InstancedMesh`).
-7. The pass ends and both passes are submitted in one command buffer.
+8. The pass ends and both passes are submitted in one command buffer.
 
 `Renderer2d` follows the same shape minus the depth buffer: visible
 shapes are collected, sorted by `zIndex`, and drawn back-to-front with
@@ -325,8 +352,8 @@ alpha blending on.
     position + color). Written once per frame.
   - `@group(1)` _object_ uniforms — model matrix, normal matrix, color and
     shadow receiver flag. Each mesh gets its own small uniform buffer and bind
-    group (created lazily on
-    first draw). Materials that declare `usesMap: true` use a second layout
+    group (created lazily on first draw). Materials that declare
+    `usesMap: true` use a second layout
     that adds the texture view and sampler to the same group. This declaration
     is independent of the current `map` value, so swapping a resource cannot
     accidentally change the shader's pipeline layout. Custom material classes
@@ -355,6 +382,7 @@ alpha blending on.
   rendered on independent canvases/devices.
 - **Geometries** upload one interleaved vertex buffer (position, normal, uv —
   32-byte stride) and one 32-bit index buffer per device, lazily on first draw.
+  Their cached local bounding boxes drive raycasting and frustum culling.
   Edit `vertices`/`indices` in place and set `geometry.needsUpdate = true`; a
   revision counter ensures every device receives the edit (the arrays must
   keep their length).
@@ -371,7 +399,13 @@ alpha blending on.
   into a second, instance-stepped vertex buffer and draws all instances
   with one `drawIndexed` — thousands of objects for a couple of draw calls.
   Instance revisions keep every renderer synchronized and guarantee that a
-  buffer recreated after `dispose()` is populated before drawing.
+  buffer recreated after `dispose()` is populated before drawing. A separate
+  bounds revision avoids rebuilding the batch bound after color-only edits.
+- **Frustum culling** extracts the six WebGPU clip planes once per camera and
+  tests local bounding boxes through their world transforms without allocating
+  corner vectors or inverting matrices. Invalid/custom bounds fail open rather
+  than risk hiding geometry. Color and directional-shadow passes use different
+  frusta.
 - **render()** updates world matrices, writes the uniforms, optionally records
   a single-sample `depth32float` directional shadow pass, records the color
   pass with a `depth24plus` depth attachment, and submits them together. With
@@ -398,8 +432,8 @@ npm run test:webgpu
 
 It compiles every stock regular/instanced WGSL module, renders the 2D and 3D
 material, texture, transparency, topology and directional-shadow variants
-through both 1x and 4x pipelines, checks WebGPU error scopes and uncaptured
-errors, exercises shared
+through both 1x and 4x pipelines, and exercises frustum culling across camera
+resizes. It checks WebGPU error scopes and uncaptured errors, exercises shared
 renderer resizing/disposal, and reads known pixels back through a GPU buffer.
 The command reports a skip when no browser or WebGPU adapter is available; set
 `MICRO_GL_REQUIRE_WEBGPU=1` in CI to turn that into a failure.
@@ -420,6 +454,8 @@ array of additional launch flags when a CI GPU setup needs them.
 - Per-instance non-uniform scale skews instanced lighting normals (the
   shader uses the instance matrix directly instead of its inverse
   transpose).
+- Instanced frustum culling is all-or-none per batch; it does not compact
+  individual visible instances into a temporary GPU buffer.
 
-The natural next step if you want to grow it: frustum culling and broader
+The natural next step if you want to grow it: spatial partitioning and broader
 material/shadow models.

@@ -11,6 +11,7 @@ import {
 import {
   create2dPipelineFixture,
   create2dPixelFixture,
+  create3dFrustumCullingFixture,
   create3dPipelineFixture,
   create3dPixelFixture,
   create3dShadowPixelFixture,
@@ -49,6 +50,7 @@ async function runSmokeTest() {
   let fixture3d = null;
   let fixture2d = null;
   let pixelFixture3d = null;
+  let frustumFixture3d = null;
   let shadowPixelFixture3d = null;
   let pixelFixture2d = null;
   const renderers = [];
@@ -76,6 +78,7 @@ async function runSmokeTest() {
     fixture3d = create3dPipelineFixture(texture);
     fixture2d = create2dPipelineFixture(texture);
     pixelFixture3d = create3dPixelFixture();
+    frustumFixture3d = create3dFrustumCullingFixture();
     shadowPixelFixture3d = create3dShadowPixelFixture();
     pixelFixture2d = create2dPixelFixture();
 
@@ -153,6 +156,34 @@ async function runSmokeTest() {
       msaa3d.setSize(128, 128);
     });
     pass(checks, 'refreshed stale shared-canvas attachments');
+
+    let frustumCullingReport;
+    await gpuPhase(device, 'frustum-culling rendering', async () => {
+      singleSample3d.setSize(64, 128);
+      const tall = renderFrustumCullingFixture(
+        singleSample3d,
+        frustumFixture3d,
+        false,
+        frustumFixture3d.expectedTallDrawCount,
+      );
+
+      singleSample3d.setSize(128, 64);
+      const wide = renderFrustumCullingFixture(
+        singleSample3d,
+        frustumFixture3d,
+        true,
+        frustumFixture3d.expectedWideDrawCount,
+      );
+      frustumCullingReport = { tall, wide };
+
+      // Keep later pixel fixtures square and make the shared renderers refresh
+      // their attachments through their normal render path.
+      singleSample3d.setSize(128, 128);
+    });
+    pass(
+      checks,
+      'culled resized-camera meshes and conservative instanced batches',
+    );
 
     let redPixel;
     let greenPixel;
@@ -245,6 +276,7 @@ async function runSmokeTest() {
       checks,
       warnings,
       pipelineReports,
+      frustumCulling: frustumCullingReport,
       pixels: {
         red3d: redPixel,
         green2d: greenPixel,
@@ -257,6 +289,7 @@ async function runSmokeTest() {
     if (fixture3d) disposeFixture(fixture3d);
     if (fixture2d) disposeFixture(fixture2d);
     if (pixelFixture3d) disposeFixture(pixelFixture3d);
+    if (frustumFixture3d) disposeFixture(frustumFixture3d);
     if (shadowPixelFixture3d) disposeFixture(shadowPixelFixture3d);
     if (pixelFixture2d) disposeFixture(pixelFixture2d);
     if (texture) texture.dispose();
@@ -265,6 +298,73 @@ async function runSmokeTest() {
       gpu.device.destroy();
     }
   }
+}
+
+function renderFrustumCullingFixture(
+  renderer,
+  fixture,
+  expectAspectSensitive,
+  expectedDrawCount,
+) {
+  renderer.render(fixture.scene, fixture.camera);
+  const expectedAspect = renderer.canvas.width / renderer.canvas.height;
+  assert(
+    Math.abs(fixture.camera.aspect - expectedAspect) < 1e-12,
+    `frustum fixture: expected camera aspect ${expectedAspect}, received ` +
+      `${fixture.camera.aspect}`,
+  );
+  assert(
+    renderer.drawCount === expectedDrawCount,
+    `frustum fixture at aspect ${expectedAspect}: expected drawCount ` +
+      `${expectedDrawCount}, received ${renderer.drawCount}`,
+  );
+
+  const colorMeshes = [
+    ...renderer._opaqueList,
+    ...renderer._transparentList,
+  ];
+  assert(
+    colorMeshes.includes(fixture.aspectSensitive) === expectAspectSensitive,
+    `frustum fixture at aspect ${expectedAspect}: side mesh visibility was ` +
+      `${colorMeshes.includes(fixture.aspectSensitive)}`,
+  );
+  assert(
+    colorMeshes.includes(fixture.forced),
+    'frustum fixture: frustumCulled=false mesh was removed',
+  );
+  assert(
+    !colorMeshes.includes(fixture.allOutsideBatch),
+    'frustum fixture: all-outside instanced batch was retained',
+  );
+  assert(
+    colorMeshes.includes(fixture.mixedBatch),
+    'frustum fixture: mixed instanced batch was removed',
+  );
+  assert(
+    !colorMeshes.includes(fixture.shadowCaster) &&
+      renderer._shadowMeshList.includes(fixture.shadowCaster),
+    'frustum fixture: off-camera light-visible caster was not shadow-only',
+  );
+  assert(
+    renderer.shadowDrawCount === fixture.expectedShadowDrawCount,
+    `frustum fixture: expected shadowDrawCount ` +
+      `${fixture.expectedShadowDrawCount}, received ` +
+      `${renderer.shadowDrawCount}`,
+  );
+
+  return {
+    aspect: fixture.camera.aspect,
+    drawCount: renderer.drawCount,
+    shadowDrawCount: renderer.shadowDrawCount,
+    aspectSensitiveVisible: colorMeshes.includes(fixture.aspectSensitive),
+    forcedVisible: colorMeshes.includes(fixture.forced),
+    allOutsideBatchVisible: colorMeshes.includes(fixture.allOutsideBatch),
+    mixedBatchVisible: colorMeshes.includes(fixture.mixedBatch),
+    shadowCasterColorVisible: colorMeshes.includes(fixture.shadowCaster),
+    shadowCasterDepthVisible: renderer._shadowMeshList.includes(
+      fixture.shadowCaster,
+    ),
+  };
 }
 
 function renderFixture(renderer, fixture, label, checks) {

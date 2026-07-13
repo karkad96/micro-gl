@@ -259,6 +259,90 @@ export function create3dPixelFixture() {
   };
 }
 
+/**
+ * A count-only scene that exercises renderer frustum decisions without
+ * relying on rasterization details. The side mesh enters the camera after a
+ * tall-to-wide resize, while the directional light keeps an off-camera caster
+ * inside its own independently aimed frustum.
+ */
+export function create3dFrustumCullingFixture() {
+  const geometry = new BoxGeometry();
+  const material = new BasicMaterial({ color: [0.8, 0.85, 1, 1] });
+  const scene = new Scene();
+  scene.background = [0, 0, 0, 1];
+
+  const center = new Mesh(geometry, material);
+  center.position.set(0, 0, -5);
+  scene.add(center);
+
+  const aspectSensitive = new Mesh(geometry, material);
+  aspectSensitive.position.set(3, 0, -5);
+  scene.add(aspectSensitive);
+
+  const forced = new Mesh(geometry, material);
+  forced.position.set(-20, 0, -5);
+  forced.frustumCulled = false;
+  scene.add(forced);
+
+  const instanceMatrix = new Mat4();
+  const allOutsideBatch = new InstancedMesh(geometry, material, 2);
+  allOutsideBatch.setMatrixAt(
+    0,
+    instanceMatrix.makeTranslation(12, 0, -5),
+  );
+  allOutsideBatch.setMatrixAt(
+    1,
+    instanceMatrix.makeTranslation(14, 0, -5),
+  );
+  scene.add(allOutsideBatch);
+
+  const mixedBatch = new InstancedMesh(geometry, material, 3);
+  mixedBatch.setMatrixAt(0, instanceMatrix.makeTranslation(12, 0, -5));
+  mixedBatch.setMatrixAt(1, instanceMatrix.makeTranslation(0, 0, -5));
+  mixedBatch.setMatrixAt(2, instanceMatrix.makeTranslation(14, 0, -5));
+  scene.add(mixedBatch);
+
+  const shadowCaster = new Mesh(geometry, material);
+  shadowCaster.position.set(8, 0, -5);
+  shadowCaster.castShadow = true;
+  scene.add(shadowCaster);
+
+  const sun = new DirectionalLight([1, 1, 1], 1);
+  sun.direction.set(0, 0, -1);
+  sun.castShadow = true;
+  sun.shadow.mapSize = 64;
+  sun.shadow.camera.size = 2;
+  sun.shadow.camera.near = 0.1;
+  sun.shadow.camera.far = 20;
+  sun.shadow.camera.lookAt(8, 0, -5);
+  scene.add(sun);
+
+  const camera = new PerspectiveCamera(60, 1, 0.1, 20);
+  camera.lookAt(0, 0, -1);
+
+  return {
+    scene,
+    camera,
+    geometries: new Set([geometry]),
+    objects: [
+      center,
+      aspectSensitive,
+      forced,
+      allOutsideBatch,
+      mixedBatch,
+      shadowCaster,
+    ],
+    aspectSensitive,
+    forced,
+    allOutsideBatch,
+    mixedBatch,
+    shadowCaster,
+    expectedTallDrawCount: 5,
+    expectedWideDrawCount: 6,
+    expectedShadowDrawCount: 1,
+  };
+}
+
 /** A top-down scene with stable lit and shadowed ground sample points. */
 export function create3dShadowPixelFixture() {
   const groundGeometry = new PlaneGeometry(6, 6);

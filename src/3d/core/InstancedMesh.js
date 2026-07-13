@@ -1,6 +1,7 @@
 import { Mesh } from './Mesh.js';
 import { srgbToLinear } from '../../math/color.js';
 import { INSTANCE_SIZE } from '../constants.js';
+import { computeInstancedBounds } from './InstancedBounds.js';
 
 export { INSTANCE_SIZE } from '../constants.js';
 
@@ -41,7 +42,35 @@ export class InstancedMesh extends Mesh {
     // Resource caches compare revisions so every renderer/device receives
     // an edit, even after another renderer has cleared needsUpdate.
     this._instanceRevision = 0;
+    this._boundsRevision = 0;
     this._needsUpdate = true;
+    this._instanceBounds = null;
+    this._instanceBoundsSource = null;
+    this._instanceBoundsRevision = -1;
+    this._instanceBoundsCount = -1;
+  }
+
+  /**
+   * Mesh-local union of every transformed instance. Frustum culling remains
+   * batch-level: if this box intersects, all `count` instances draw together.
+   */
+  get bounds() {
+    const sourceBounds = this.geometry?.bounds || null;
+    if (
+      this._instanceBoundsSource !== sourceBounds ||
+      this._instanceBoundsRevision !== this._boundsRevision ||
+      this._instanceBoundsCount !== this.count
+    ) {
+      this._instanceBounds = computeInstancedBounds(
+        sourceBounds,
+        this.instanceData,
+        this.count,
+      );
+      this._instanceBoundsSource = sourceBounds;
+      this._instanceBoundsRevision = this._boundsRevision;
+      this._instanceBoundsCount = this.count;
+    }
+    return this._instanceBounds;
   }
 
   /** Upload hint; set true after changing `instanceData` directly. */
@@ -51,13 +80,17 @@ export class InstancedMesh extends Mesh {
 
   set needsUpdate(value) {
     this._needsUpdate = Boolean(value);
-    if (this._needsUpdate) this._instanceRevision++;
+    if (this._needsUpdate) {
+      this._instanceRevision++;
+      // Direct writes may have changed matrices, so conservatively invalidate.
+      this._boundsRevision++;
+    }
   }
 
   /** Copies a Mat4 into instance `index`'s transform. */
   setMatrixAt(index, matrix) {
     this.instanceData.set(matrix.elements, index * INSTANCE_SIZE);
-    this.needsUpdate = true;
+    this._markInstanceDataUpdated(true);
     return this;
   }
 
@@ -73,7 +106,13 @@ export class InstancedMesh extends Mesh {
     this.instanceData[base + 1] = srgbToLinear(color[1]);
     this.instanceData[base + 2] = srgbToLinear(color[2]);
     this.instanceData[base + 3] = color.length > 3 ? color[3] : 1;
-    this.needsUpdate = true;
+    this._markInstanceDataUpdated(false);
     return this;
+  }
+
+  _markInstanceDataUpdated(boundsChanged) {
+    this._needsUpdate = true;
+    this._instanceRevision++;
+    if (boundsChanged) this._boundsRevision++;
   }
 }
