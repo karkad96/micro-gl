@@ -8,6 +8,7 @@
 // --- Shared ---------------------------------------------------------------
 export { Vec3 } from './math/Vec3.js';
 export { Mat4 } from './math/Mat4.js';
+export { Frustum } from './math/Frustum.js';
 export { Vec2 } from './math/Vec2.js';
 export { Mat3 } from './math/Mat3.js';
 export { srgbToLinear, linearToSrgb } from './math/color.js';

@@ -284,7 +284,7 @@ test('the shadow pass binds caster resources and counts instanced draws', () => 
   assert.equal(calls.at(-1)[0], 'end');
 });
 
-test('renderer preparation writes receiver flags and filters shadow casters', () => {
+test('renderer preparation writes receiver flags and deduplicates shadow casters', () => {
   const renderer = new Renderer({});
   const uploads = [];
   renderer.device = {
@@ -304,33 +304,15 @@ test('renderer preparation writes receiver flags and filters shadow casters', ()
 
   const receiver = new Mesh({}, new BasicMaterial());
   receiver.receiveShadow = true;
-  renderer._prepareMesh(receiver);
-  assert.equal(uploads.at(-1)[OBJECT_UNIFORM_OFFSET.shadowFlags], 1);
-  assert.equal(renderer._shadowCasters.length, 0);
-
   const opaqueCaster = new Mesh({}, new BasicMaterial());
   opaqueCaster.castShadow = true;
-  renderer._prepareMesh(opaqueCaster);
-  assert.equal(uploads.at(-1)[OBJECT_UNIFORM_OFFSET.shadowFlags], 0);
-  assert.deepEqual(
-    renderer._shadowCasters.map(({ mesh }) => mesh),
-    [opaqueCaster],
-  );
+  renderer._opaqueList.push(receiver, opaqueCaster);
+  renderer._shadowMeshList.push(opaqueCaster);
+  renderer._prepareMeshes();
 
-  const transparentCaster = new Mesh(
-    {},
-    new BasicMaterial({ transparent: true }),
-  );
-  transparentCaster.castShadow = true;
-  renderer._prepareMesh(transparentCaster);
-
-  const lineCaster = new Mesh(
-    {},
-    new BasicMaterial({ topology: 'line-list' }),
-  );
-  lineCaster.castShadow = true;
-  renderer._prepareMesh(lineCaster);
-
+  assert.equal(uploads[0][OBJECT_UNIFORM_OFFSET.shadowFlags], 1);
+  assert.equal(uploads[1][OBJECT_UNIFORM_OFFSET.shadowFlags], 0);
+  assert.equal(renderer._preparedMeshes.size, 2);
   assert.deepEqual(
     renderer._shadowCasters.map(({ mesh }) => mesh),
     [opaqueCaster],

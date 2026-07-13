@@ -1,5 +1,6 @@
 import { Mesh } from './Mesh.js';
 import { Mat4 } from '../../math/Mat4.js';
+import { Frustum } from '../../math/Frustum.js';
 import { srgbToLinear } from '../../math/color.js';
 import { GpuResources } from './GpuResources.js';
 import { DirectionalShadowMap } from './DirectionalShadowMap.js';
@@ -56,9 +57,9 @@ export class Renderer {
     this.device = null;
     this.context = null;
     this.format = null;
-    /** How many objects the last render() call drew. */
+    /** Color-pass instances submitted by the last render(), after culling. */
     this.drawCount = 0;
-    /** How many caster instances the last directional shadow pass drew. */
+    /** Shadow-pass instances submitted by the last render(), after culling. */
     this.shadowDrawCount = 0;
 
     this._autoResize = autoResize;
@@ -80,10 +81,13 @@ export class Renderer {
     this._targetHeight = 0;
     this._opaqueList = [];
     this._transparentList = [];
+    this._shadowMeshList = [];
     this._shadowCasters = [];
     this._preparedMeshes = new Map();
     this._frameUniformWriter = new FrameUniformWriter();
     this._normalMatrix = new Mat4();
+    this._viewFrustum = new Frustum();
+    this._shadowFrustum = new Frustum();
   }
 
   /**
@@ -250,10 +254,14 @@ export class Renderer {
     scene.updateWorldMatrix();
     camera.updateMatrices();
 
-    this._collectMeshes(scene, camera);
-    this._prepareMeshes();
     const directionalLight = this._writeFrameUniforms(scene, camera);
     this._shadowMap.update(directionalLight);
+    this._collectMeshes(
+      scene,
+      camera,
+      directionalLight?.shadow?.camera || null,
+    );
+    this._prepareMeshes();
 
     const encoder = this.device.createCommandEncoder();
     this.shadowDrawCount = this._shadowMap.render(
@@ -270,16 +278,46 @@ export class Renderer {
     this.device.queue.submit([encoder.finish()]);
   }
 
-  /** Collects visible meshes and orders transparent ones back-to-front. */
-  _collectMeshes(scene, camera) {
-    const { _opaqueList: opaque, _transparentList: transparent } = this;
+  /**
+   * Collects camera-visible color meshes and light-visible shadow casters,
+   * then orders retained transparent meshes back-to-front.
+   */
+  _collectMeshes(scene, camera, shadowCamera = null) {
+    const {
+      _opaqueList: opaque,
+      _transparentList: transparent,
+      _shadowMeshList: shadowMeshes,
+    } = this;
     opaque.length = 0;
     transparent.length = 0;
+    shadowMeshes.length = 0;
+    this._viewFrustum.setFromViewProjectionMatrix(
+      camera.viewProjectionMatrix,
+    );
+    const collectShadows = this._shadowMap?.enabled && shadowCamera;
+    if (collectShadows) {
+      this._shadowFrustum.setFromViewProjectionMatrix(
+        shadowCamera.viewProjectionMatrix,
+      );
+    }
+
     let drawCount = 0;
     scene.traverseVisible((object) => {
       if (object instanceof Mesh) {
-        (object.material.transparent ? transparent : opaque).push(object);
-        drawCount += object.isInstanced ? object.count : 1;
+        if (object.isInstanced && object.count === 0) return;
+        if (this._intersectsFrustum(object, this._viewFrustum)) {
+          (object.material.transparent ? transparent : opaque).push(object);
+          drawCount += object.isInstanced ? object.count : 1;
+        }
+        if (
+          collectShadows &&
+          object.castShadow &&
+          !object.material.transparent &&
+          isTriangleTopology(object.material.topology) &&
+          this._intersectsFrustum(object, this._shadowFrustum)
+        ) {
+          shadowMeshes.push(object);
+        }
       }
     });
     this.drawCount = drawCount;
@@ -293,6 +331,13 @@ export class Renderer {
       }
       transparent.sort((a, b) => a._viewDepth - b._viewDepth);
     }
+  }
+
+  _intersectsFrustum(mesh, frustum) {
+    return (
+      !mesh.frustumCulled ||
+      frustum.intersectsBox(mesh.bounds, mesh.worldMatrix)
+    );
   }
 
   _beginRenderPass(encoder, background) {
@@ -357,6 +402,7 @@ export class Renderer {
     this._shadowMap = null;
     this._opaqueList.length = 0;
     this._transparentList.length = 0;
+    this._shadowMeshList.length = 0;
     this._shadowCasters.length = 0;
     this._preparedMeshes.clear();
     this.drawCount = 0;
@@ -388,6 +434,11 @@ export class Renderer {
     this._shadowCasters.length = 0;
     for (const mesh of this._opaqueList) this._prepareMesh(mesh);
     for (const mesh of this._transparentList) this._prepareMesh(mesh);
+    for (const mesh of this._shadowMeshList) {
+      const prepared =
+        this._preparedMeshes.get(mesh) || this._prepareMesh(mesh);
+      this._shadowCasters.push(prepared);
+    }
   }
 
   _prepareMesh(mesh) {
@@ -421,12 +472,6 @@ export class Renderer {
 
     const prepared = { mesh, geometryGPU, meshGPU };
     this._preparedMeshes.set(mesh, prepared);
-    if (
-      mesh.castShadow &&
-      !mesh.material.transparent &&
-      isTriangleTopology(mesh.material.topology)
-    ) {
-      this._shadowCasters.push(prepared);
-    }
+    return prepared;
   }
 }
