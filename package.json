@@ -1,11 +1,36 @@
 {
   "name": "micro-gl",
-  "private": true,
+  "version": "0.1.0",
+  "description": "A tiny dependency-free 2D and 3D WebGPU engine",
   "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
   "scripts": {
     "test": "node --test",
-    "test:webgpu": "node --test test-browser/webgpu-runner.js"
+    "test:webgpu": "node --test test-browser/webgpu-runner.js",
+    "prepublishOnly": "npm test"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karkad96/micro-gl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/karkad96/micro-gl/issues"
+  },
+  "homepage": "https://github.com/karkad96/micro-gl#readme",
+  "keywords": [
+    "webgpu",
+    "graphics",
+    "game-engine",
+    "3d",
+    "2d"
+  ],
   "devDependencies": {
     "playwright-core": "^1.61.1"
   }

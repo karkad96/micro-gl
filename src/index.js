@@ -2,8 +2,8 @@
 //   src/3d/ — the perspective engine (Mat4, lights, depth buffer)
 //   src/2d/ — the flat engine (Mat3, zIndex ordering, alpha blending)
 // with src/math/ and src/core/ shared between them.
-// Import everything from this single entry point:
-//   import { Renderer, Scene, Mesh, ... } from './src/index.js';
+// Import everything from this single package entry point:
+//   import { Renderer, Scene, Mesh, ... } from 'micro-gl';
 
 // --- Shared ---------------------------------------------------------------
 export { Vec3 } from './math/Vec3.js';
