@@ -42,7 +42,9 @@ export class Pipelines2d {
 
     Object.assign(
       this,
-      createMaterialPipelineLayouts(device, GPUShaderStage.VERTEX),
+      createMaterialPipelineLayouts(device, GPUShaderStage.VERTEX, {
+        label: '2D material',
+      }),
     );
   }
 
@@ -67,10 +69,11 @@ export class Pipelines2d {
     return pipeline;
   }
 
-  _moduleFor(code) {
+  _moduleFor(code, label) {
     let module = this._modules.get(code);
     if (!module) {
-      module = this.device.createShaderModule({ code });
+      // Variants sharing this source keep the first creator's label.
+      module = this.device.createShaderModule({ label, code });
       this._modules.set(code, module);
     }
     return module;
@@ -85,8 +88,12 @@ export class Pipelines2d {
       primitive.stripIndexFormat = INDEX_FORMAT;
     }
     const buffers = vertexBufferLayouts2d(instanced);
-    const module = this._moduleFor(shaderCode);
+    const materialName = material.constructor.name;
+    const module = this._moduleFor(shaderCode, `2D ${materialName} shader`);
     return this.device.createRenderPipeline({
+      label:
+        `2D ${materialName} (${topology}, cull ${cullMode}, ${frontFace}` +
+        `${textured ? ', textured' : ''}${instanced ? ', instanced' : ''})`,
       layout: textured ? this.texturedPipelineLayout : this.pipelineLayout,
       vertex: {
         module,

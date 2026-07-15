@@ -18,6 +18,7 @@ export class ShadowPipelines {
     this._cache = new Map();
     this._module = null;
     this._layout = device.createPipelineLayout({
+      label: 'Directional shadow pipeline layout',
       bindGroupLayouts: [shadowUniformLayout, objectLayout],
     });
   }
@@ -32,6 +33,9 @@ export class ShadowPipelines {
         primitive.stripIndexFormat = INDEX_FORMAT;
       }
       pipeline = this.device.createRenderPipeline({
+        label:
+          `Directional shadow (${topology}, cull ${cullMode}, ` +
+          `${frontFace}${instanced ? ', instanced' : ''})`,
         layout: this._layout,
         vertex: {
           module: this._moduleForShadowPass(),
@@ -56,6 +60,7 @@ export class ShadowPipelines {
   _moduleForShadowPass() {
     if (!this._module) {
       this._module = this.device.createShaderModule({
+        label: 'Directional shadow depth shader',
         code: DIRECTIONAL_SHADOW_SHADER,
       });
     }

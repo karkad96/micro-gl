@@ -23,7 +23,7 @@ export async function initWebGpu(canvas) {
   if (!adapter) {
     throw new Error('No suitable GPU adapter found.');
   }
-  const device = await adapter.requestDevice();
+  const device = await adapter.requestDevice({ label: 'micro-gl device' });
   let context = null;
   try {
     context = canvas.getContext('webgpu');
@@ -49,6 +49,16 @@ export async function initWebGpu(canvas) {
             'automatically when first drawn on the replacement device.',
         );
       }
+    });
+
+    // Validation errors also arrive asynchronously — without a listener a
+    // mistake often shows up only as a silently black canvas. Every object
+    // this library creates is labeled, so the message names the resource.
+    device.addEventListener('uncapturederror', (event) => {
+      console.error(
+        'micro-gl: uncaptured WebGPU error: ' +
+          `${event.error?.message || event.error}`,
+      );
     });
 
     return { device, context, format, colorFormat, canvas };

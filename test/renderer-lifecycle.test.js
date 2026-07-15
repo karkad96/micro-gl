@@ -236,6 +236,7 @@ test('a raw shared setup must declare its configured sRGB view format', () => {
 function initializationDevice(events = []) {
   return {
     lost: new Promise(() => {}),
+    addEventListener() {},
     queue: { writeBuffer() {} },
     createBindGroupLayout: (descriptor) => ({ descriptor }),
     createPipelineLayout: (descriptor) => ({ descriptor }),
@@ -388,6 +389,47 @@ test('disposing during shared init rejects instead of fulfilling unusably', asyn
   assert.equal(borrower.device, null);
   assert.deepEqual([...owner._deviceLease.members], [owner]);
   owner.dispose();
+});
+
+test('initWebGpu reports uncaptured WebGPU errors with a clear prefix', async () => {
+  const originalNavigator = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'navigator',
+  );
+  const listeners = new Map();
+  const device = initializationDevice();
+  device.addEventListener = (type, handler) => listeners.set(type, handler);
+  const context = { configure() {}, unconfigure() {} };
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: {
+      gpu: {
+        requestAdapter: async () => ({ requestDevice: async () => device }),
+        getPreferredCanvasFormat: () => 'bgra8unorm',
+      },
+    },
+  });
+  const originalConsoleError = console.error;
+  const reported = [];
+  console.error = (...args) => reported.push(args.join(' '));
+
+  try {
+    await initWebGpu({ getContext: () => context });
+    const handler = listeners.get('uncapturederror');
+    assert.equal(typeof handler, 'function');
+
+    handler({ error: { message: 'binding mismatch' } });
+    assert.equal(reported.length, 1);
+    assert.match(reported[0], /micro-gl: uncaptured WebGPU error/);
+    assert.match(reported[0], /binding mismatch/);
+  } finally {
+    console.error = originalConsoleError;
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, 'navigator', originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
 });
 
 test('canvas setup failure destroys the already-requested device', async () => {

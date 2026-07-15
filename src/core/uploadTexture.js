@@ -24,6 +24,7 @@ export function uploadTexture(device, texture) {
     // and mip filtering happen in linear space.
     const format = texture.srgb ? SRGB_TEXTURE_FORMAT : LINEAR_TEXTURE_FORMAT;
     const gpuTexture = device.createTexture({
+      label: `Texture ${texture.width}x${texture.height}`,
       size,
       mipLevelCount: levels,
       format,
@@ -40,6 +41,7 @@ export function uploadTexture(device, texture) {
     );
     if (levels > 1) generateMipmaps(device, gpuTexture, levels, format);
     const sampler = device.createSampler({
+      label: 'Texture sampler',
       magFilter: texture.magFilter,
       minFilter: texture.minFilter,
       mipmapFilter: texture.mipmaps ? 'linear' : 'nearest',
