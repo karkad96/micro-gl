@@ -55,12 +55,14 @@ export class GpuResources {
 
     if (!gpu) {
       const vertexBuffer = this.device.createBuffer({
+        label: 'Geometry vertices',
         size: geometry.vertices.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       });
       this.device.queue.writeBuffer(vertexBuffer, 0, geometry.vertices);
 
       const indexBuffer = this.device.createBuffer({
+        label: 'Geometry indices',
         size: geometry.indices.byteLength,
         usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       });
@@ -99,6 +101,7 @@ export class GpuResources {
     if (!gpu) {
       gpu = {
         uniformBuffer: this.device.createBuffer({
+          label: 'Mesh uniforms',
           size: OBJECT_UNIFORM_SIZE,
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         }),
@@ -110,6 +113,7 @@ export class GpuResources {
         ),
       };
       gpu.shadowBindGroup = this.device.createBindGroup({
+        label: 'Mesh shadow-pass uniforms',
         layout: this.pipelines.objectBindGroupLayout,
         entries: [
           {
@@ -120,6 +124,7 @@ export class GpuResources {
       });
       if (mesh.isInstanced) {
         gpu.instanceBuffer = this.device.createBuffer({
+          label: 'Mesh instance data',
           size: mesh.instanceData.byteLength,
           usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
         });
@@ -161,7 +166,11 @@ export class GpuResources {
           { binding: SHADER_BINDING.sampler, resource: mapGpu.sampler },
         );
       }
-      gpu.bindGroup = this.device.createBindGroup({ layout, entries });
+      gpu.bindGroup = this.device.createBindGroup({
+        label: mapGpu ? 'Textured mesh uniforms' : 'Mesh uniforms',
+        layout,
+        entries,
+      });
       gpu.mapGpu = mapGpu;
     }
     return gpu;

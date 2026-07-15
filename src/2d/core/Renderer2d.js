@@ -145,10 +145,12 @@ export class Renderer2d {
       );
 
       this._frameUniformBuffer = this.device.createBuffer({
+        label: '2D frame uniforms',
         size: FRAME_UNIFORM_SIZE_2D,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
       this._frameBindGroup = this.device.createBindGroup({
+        label: '2D frame uniforms',
         layout: this._resources.frameBindGroupLayout,
         entries: [
           {
@@ -216,6 +218,7 @@ export class Renderer2d {
       // The multisampled color target the pass draws into; it resolves
       // to the swap chain texture at the end of every render pass.
       this._msaaTexture = this.device.createTexture({
+        label: '2D MSAA color target',
         size: [this.canvas.width, this.canvas.height],
         format: this.colorFormat,
         sampleCount: this._sampleCount,
@@ -246,7 +249,9 @@ export class Renderer2d {
 
     const drawList = this._collectShapes(scene);
 
-    const encoder = this.device.createCommandEncoder();
+    const encoder = this.device.createCommandEncoder({
+      label: '2D frame encoder',
+    });
     const pass = this._beginRenderPass(encoder, scene.background);
 
     pass.setBindGroup(SHADER_BIND_GROUP.frame, this._frameBindGroup);
@@ -279,6 +284,7 @@ export class Renderer2d {
       .getCurrentTexture()
       .createView({ format: this.colorFormat });
     return encoder.beginRenderPass({
+      label: '2D color pass',
       colorAttachments: [
         colorAttachment(
           this._msaaView,

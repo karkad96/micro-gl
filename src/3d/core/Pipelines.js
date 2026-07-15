@@ -44,7 +44,7 @@ export class Pipelines {
       createMaterialPipelineLayouts(
         device,
         GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        { shadows: true },
+        { shadows: true, label: '3D material' },
       ),
     );
   }
@@ -75,10 +75,11 @@ export class Pipelines {
     return pipeline;
   }
 
-  _moduleFor(code) {
+  _moduleFor(code, label) {
     let module = this._modules.get(code);
     if (!module) {
-      module = this.device.createShaderModule({ code });
+      // Variants sharing this source keep the first creator's label.
+      module = this.device.createShaderModule({ label, code });
       this._modules.set(code, module);
     }
     return module;
@@ -97,8 +98,13 @@ export class Pipelines {
     if (transparent) {
       target.blend = STRAIGHT_ALPHA_BLEND;
     }
-    const module = this._moduleFor(shaderCode);
+    const materialName = material.constructor.name;
+    const module = this._moduleFor(shaderCode, `3D ${materialName} shader`);
     return this.device.createRenderPipeline({
+      label:
+        `3D ${materialName} (${topology}, cull ${cullMode}, ${frontFace}` +
+        `${textured ? ', textured' : ''}${instanced ? ', instanced' : ''}` +
+        `${transparent ? ', transparent' : ''})`,
       layout: textured ? this.texturedPipelineLayout : this.pipelineLayout,
       vertex: {
         module,

@@ -55,6 +55,39 @@ test('map-requiring materials refuse construction without one', () => {
   assert.throws(() => new SpriteMaterial2d(), /requires/);
 });
 
+// Records every descriptor so label and state assertions can inspect them.
+function pipelineBuildingDevice() {
+  return {
+    createBindGroupLayout: (descriptor) => ({ descriptor }),
+    createPipelineLayout: (descriptor) => ({ descriptor }),
+    createShaderModule: (descriptor) => ({ descriptor }),
+    createRenderPipeline: (descriptor) => ({ descriptor }),
+  };
+}
+
+test('pipelines and shader modules carry material-identifying labels', () => {
+  const pipelines = new Pipelines(pipelineBuildingDevice(), 'bgra8unorm-srgb');
+  const transparent = pipelines.pipelineFor(
+    new LambertMaterial({ transparent: true }),
+  );
+  assert.match(transparent.descriptor.label, /LambertMaterial/);
+  assert.match(transparent.descriptor.label, /transparent/);
+  assert.match(
+    transparent.descriptor.vertex.module.descriptor.label,
+    /LambertMaterial/,
+  );
+  assert.match(transparent.descriptor.layout.descriptor.label, /3D material/);
+
+  const pipelines2d = new Pipelines2d(
+    pipelineBuildingDevice(),
+    'bgra8unorm-srgb',
+  );
+  const instanced = pipelines2d.pipelineFor(new BasicMaterial2d(), true);
+  assert.match(instanced.descriptor.label, /BasicMaterial2d/);
+  assert.match(instanced.descriptor.label, /instanced/);
+  assert.match(instanced.descriptor.layout.descriptor.label, /2D material/);
+});
+
 test('shader composition is memoized without mixing up its inputs', () => {
   assert.equal(composeShaderCode('vertex;', 'fragment;'), 'vertex;fragment;');
   // Repeats hit the cache; a two-level key cannot blur the boundary

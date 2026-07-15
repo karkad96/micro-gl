@@ -164,10 +164,12 @@ export class Renderer {
       );
 
       this._frameUniformBuffer = this.device.createBuffer({
+        label: '3D frame uniforms',
         size: FRAME_UNIFORM_SIZE,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
       this._frameBindGroup = this.device.createBindGroup({
+        label: '3D frame uniforms',
         layout: this._resources.frameBindGroupLayout,
         entries: [
           {
@@ -233,6 +235,7 @@ export class Renderer {
     const size = [this.canvas.width, this.canvas.height];
     if (this._depthTexture) this._depthTexture.destroy();
     this._depthTexture = this.device.createTexture({
+      label: '3D depth attachment',
       size,
       format: DEPTH_FORMAT,
       sampleCount: this._sampleCount,
@@ -246,6 +249,7 @@ export class Renderer {
       // The multisampled color target the pass draws into; it resolves
       // to the swap chain texture at the end of every render pass.
       this._msaaTexture = this.device.createTexture({
+        label: '3D MSAA color target',
         size,
         format: this.colorFormat,
         sampleCount: this._sampleCount,
@@ -277,7 +281,9 @@ export class Renderer {
     );
     this._prepareMeshes();
 
-    const encoder = this.device.createCommandEncoder();
+    const encoder = this.device.createCommandEncoder({
+      label: '3D frame encoder',
+    });
     this.shadowDrawCount = this._shadowMap.render(
       encoder,
       this._shadowCasters,
@@ -359,6 +365,7 @@ export class Renderer {
       .getCurrentTexture()
       .createView({ format: this.colorFormat });
     return encoder.beginRenderPass({
+      label: '3D color pass',
       colorAttachments: [
         colorAttachment(
           this._msaaView,

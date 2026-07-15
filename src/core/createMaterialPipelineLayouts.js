@@ -7,16 +7,19 @@ import {
 /**
  * Creates the bind-group and pipeline layouts shared by the material system.
  * The 2D and 3D engines differ only in which stages can read frame uniforms.
+ * `label` prefixes every layout's label so validation errors name the engine
+ * that owns the object.
  */
 export function createMaterialPipelineLayouts(
   device,
   frameVisibility,
-  { shadows = false } = {},
+  { shadows = false, label = 'Material' } = {},
 ) {
   const objectVisibility =
     GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
 
   const frameBindGroupLayout = device.createBindGroupLayout({
+    label: `${label} frame uniforms layout`,
     entries: [
       {
         binding: SHADER_BINDING.uniforms,
@@ -27,6 +30,7 @@ export function createMaterialPipelineLayouts(
   });
 
   const objectBindGroupLayout = device.createBindGroupLayout({
+    label: `${label} object uniforms layout`,
     entries: [
       {
         binding: SHADER_BINDING.uniforms,
@@ -37,6 +41,7 @@ export function createMaterialPipelineLayouts(
   });
 
   const texturedObjectBindGroupLayout = device.createBindGroupLayout({
+    label: `${label} textured object uniforms layout`,
     entries: [
       {
         binding: SHADER_BINDING.uniforms,
@@ -58,6 +63,7 @@ export function createMaterialPipelineLayouts(
 
   const shadowBindGroupLayout = shadows
     ? device.createBindGroupLayout({
+        label: `${label} shadow sampling layout`,
         entries: [
           {
             binding: SHADOW_BINDING.uniforms,
@@ -85,12 +91,14 @@ export function createMaterialPipelineLayouts(
     shadowBindGroupLayout,
     pipelineLayout: createPipelineLayout(
       device,
+      `${label} pipeline layout`,
       frameBindGroupLayout,
       objectBindGroupLayout,
       shadowBindGroupLayout,
     ),
     texturedPipelineLayout: createPipelineLayout(
       device,
+      `${label} textured pipeline layout`,
       frameBindGroupLayout,
       texturedObjectBindGroupLayout,
       shadowBindGroupLayout,
@@ -100,6 +108,7 @@ export function createMaterialPipelineLayouts(
 
 function createPipelineLayout(
   device,
+  label,
   frameLayout,
   objectLayout,
   shadowLayout,
@@ -110,5 +119,5 @@ function createPipelineLayout(
   if (shadowLayout) {
     bindGroupLayouts[SHADER_BIND_GROUP.shadow] = shadowLayout;
   }
-  return device.createPipelineLayout({ bindGroupLayouts });
+  return device.createPipelineLayout({ label, bindGroupLayouts });
 }

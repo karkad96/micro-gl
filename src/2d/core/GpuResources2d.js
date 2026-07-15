@@ -54,12 +54,14 @@ export class GpuResources2d {
 
     if (!gpu) {
       const vertexBuffer = this.device.createBuffer({
+        label: 'Geometry vertices',
         size: geometry.vertices.byteLength,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       });
       this.device.queue.writeBuffer(vertexBuffer, 0, geometry.vertices);
 
       const indexBuffer = this.device.createBuffer({
+        label: 'Geometry indices',
         size: geometry.indices.byteLength,
         usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
       });
@@ -98,6 +100,7 @@ export class GpuResources2d {
     if (!gpu) {
       gpu = {
         uniformBuffer: this.device.createBuffer({
+          label: 'Shape uniforms',
           size: OBJECT_UNIFORM_SIZE_2D,
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         }),
@@ -109,6 +112,7 @@ export class GpuResources2d {
       };
       if (shape.isInstanced) {
         gpu.instanceBuffer = this.device.createBuffer({
+          label: 'Shape instance data',
           size: shape.instanceData.byteLength,
           usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
         });
@@ -150,7 +154,11 @@ export class GpuResources2d {
           { binding: SHADER_BINDING.sampler, resource: mapGpu.sampler },
         );
       }
-      gpu.bindGroup = this.device.createBindGroup({ layout, entries });
+      gpu.bindGroup = this.device.createBindGroup({
+        label: mapGpu ? 'Textured shape uniforms' : 'Shape uniforms',
+        layout,
+        entries,
+      });
       gpu.mapGpu = mapGpu;
     }
     return gpu;

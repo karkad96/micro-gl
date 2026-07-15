@@ -59,8 +59,14 @@ export function generateMipmaps(device, texture, levels, format) {
   let generator = generators.get(device);
   if (!generator) {
     generator = {
-      module: device.createShaderModule({ code: MIPMAP_WGSL }),
-      sampler: device.createSampler({ minFilter: 'linear' }),
+      module: device.createShaderModule({
+        label: 'Mipmap blit shader',
+        code: MIPMAP_WGSL,
+      }),
+      sampler: device.createSampler({
+        label: 'Mipmap sampler',
+        minFilter: 'linear',
+      }),
       pipelines: new Map(),
     };
     generators.set(device, generator);
@@ -68,6 +74,7 @@ export function generateMipmaps(device, texture, levels, format) {
   let pipeline = generator.pipelines.get(format);
   if (!pipeline) {
     pipeline = device.createRenderPipeline({
+      label: `Mipmap blit (${format})`,
       layout: 'auto',
       vertex: {
         module: generator.module,
@@ -82,9 +89,12 @@ export function generateMipmaps(device, texture, levels, format) {
     generator.pipelines.set(format, pipeline);
   }
 
-  const encoder = device.createCommandEncoder();
+  const encoder = device.createCommandEncoder({
+    label: 'Mipmap generation',
+  });
   for (let level = 1; level < levels; level++) {
     const bindGroup = device.createBindGroup({
+      label: `Mipmap level ${level} source`,
       layout: pipeline.getBindGroupLayout(0),
       entries: [
         {
@@ -98,6 +108,7 @@ export function generateMipmaps(device, texture, levels, format) {
       ],
     });
     const pass = encoder.beginRenderPass({
+      label: `Mipmap level ${level}`,
       colorAttachments: [
         {
           view: texture.createView({ baseMipLevel: level, mipLevelCount: 1 }),
