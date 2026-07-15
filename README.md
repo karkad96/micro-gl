@@ -25,7 +25,8 @@ in a large framework.
 npm install micro-gl
 ```
 
-The package is ESM-only:
+The package is ESM-only and ships TypeScript declarations generated from
+its JSDoc, so editors and TypeScript projects get the full typed API:
 
 ```js
 import { Renderer, Scene, Mesh } from 'micro-gl';
@@ -229,4 +230,6 @@ npm run test:webgpu
 
 `npm test` runs the Node unit and regression suite. `npm run test:webgpu`
 uses an installed Chrome or Edge browser to compile and render the real WebGPU
-pipelines.
+pipelines. `npm run check:types` regenerates the TypeScript declarations from
+JSDoc and typechecks them against a strict consumer (`test-types/consumer.ts`).
+CI runs the Node suite and the type check on every push and pull request.

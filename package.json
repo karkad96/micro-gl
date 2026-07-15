@@ -5,16 +5,24 @@
   "type": "module",
   "main": "./src/index.js",
   "module": "./src/index.js",
+  "types": "./types/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    }
   },
   "files": [
-    "src"
+    "src",
+    "types"
   ],
   "scripts": {
     "test": "node --test",
     "test:webgpu": "node --test test-browser/webgpu-runner.js",
-    "prepublishOnly": "npm test"
+    "build:types": "tsc -p tsconfig.types.json",
+    "check:types": "npm run build:types && tsc -p test-types/tsconfig.json",
+    "prepack": "npm run build:types",
+    "prepublishOnly": "npm test && npm run check:types"
   },
   "repository": {
     "type": "git",
@@ -32,6 +40,7 @@
     "2d"
   ],
   "devDependencies": {
-    "playwright-core": "^1.61.1"
+    "playwright-core": "^1.61.1",
+    "typescript": "^7.0.2"
   }
 }

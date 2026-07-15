@@ -1,6 +1,8 @@
 import { Material } from './Material.js';
 import { TEXTURE_FRAGMENT_SHADER } from '../shaders/fragments.js';
 
+/** @typedef {import('../../core/Texture.js').Texture} Texture */
+
 /**
  * A diffuse (Lambertian) material that gets its surface color from a
  * texture sampled at the mesh's uvs, tinted by `color` — LambertMaterial

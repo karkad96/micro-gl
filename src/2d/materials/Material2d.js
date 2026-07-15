@@ -9,6 +9,8 @@ import {
   SHAPE_SHADER_PREFIX,
 } from '../shaders/vertexStages.js';
 
+/** @typedef {import('../../core/Texture.js').Texture} Texture */
+
 /**
  * Base class for 2D materials. It owns per-object parameters and pipeline
  * state; reusable WGSL stages live in `2d/shaders`.
@@ -68,7 +70,10 @@ export class Material2d {
     return composeShaderCode(Material2d.INSTANCED_WGSL, this.fragmentShader);
   }
 
-  /** Fragment-stage WGSL supplied by a concrete material. */
+  /**
+   * Fragment-stage WGSL supplied by a concrete material.
+   * @returns {string}
+   */
   get fragmentShader() {
     throw new Error('Material2d subclasses must implement fragmentShader');
   }

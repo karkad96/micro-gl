@@ -6,6 +6,8 @@ const _pointer = new Vec2();
 const _local = new Vec2();
 const _worldPos = new Vec2();
 
+/** @typedef {import('../core/Shape2d.js').Shape2d} Shape2d */
+
 function isVisibleInHierarchy(object) {
   for (let current = object; current; current = current.parent) {
     if (!current.visible) return false;

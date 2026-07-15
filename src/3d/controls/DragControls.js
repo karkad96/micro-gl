@@ -6,6 +6,8 @@ const _parentInverse = new Mat4();
 const _worldPos = new Vec3();
 const PARALLEL_PLANE_EPSILON = 1e-9;
 
+/** @typedef {import('../core/Mesh.js').Mesh} Mesh */
+
 /**
  * Lets the user pick meshes with the pointer and drag them around.
  * Dragged objects slide on a camera-facing plane through the point

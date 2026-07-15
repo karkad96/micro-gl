@@ -64,6 +64,7 @@ export class PointerControls {
     /**
      * What a one-finger touch drag does: 'pan' (default) or 'rotate'.
      * Two-finger gestures always pan and pinch-zoom.
+     * @type {'pan' | 'rotate'}
      */
     this.singleTouchGesture = TOUCH_GESTURE.PAN;
 

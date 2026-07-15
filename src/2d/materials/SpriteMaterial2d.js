@@ -1,6 +1,8 @@
 import { Material2d } from './Material2d.js';
 import { SPRITE_FRAGMENT_SHADER_2D } from '../shaders/fragments.js';
 
+/** @typedef {import('../../core/Texture.js').Texture} Texture */
+
 /**
  * Fills the shape with a texture sampled at its uvs, tinted by `color` —
  * the 2D sprite workhorse. The texture's alpha blends like the color
