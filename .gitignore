@@ -30,6 +30,7 @@ Desktop.ini
 
 # Claude Code local settings
 .claude/
+.agents/
 
 # Local demo scenes (not published)
 main.js

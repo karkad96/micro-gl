@@ -36,12 +36,18 @@ export function getPixelRatio() {
   return Math.min(globalThis.devicePixelRatio || 1, MAX_PIXEL_RATIO);
 }
 
-/** Converts CSS dimensions into a valid WebGPU drawing-buffer extent. */
-export function drawingBufferSize(width, height) {
+/**
+ * Converts CSS dimensions into a valid WebGPU drawing-buffer extent.
+ * `maxDimension` caps each axis — pass the device's maxTextureDimension2D
+ * so a large canvas on a high-DPI display cannot request a swap chain or
+ * depth/MSAA attachment bigger than the device can allocate.
+ */
+export function drawingBufferSize(width, height, maxDimension = Infinity) {
   const pixelRatio = getPixelRatio();
+  const limit = Number.isFinite(maxDimension) ? maxDimension : Infinity;
   return {
-    width: Math.max(1, Math.floor(width * pixelRatio)),
-    height: Math.max(1, Math.floor(height * pixelRatio)),
+    width: Math.max(1, Math.min(Math.floor(width * pixelRatio), limit)),
+    height: Math.max(1, Math.min(Math.floor(height * pixelRatio), limit)),
   };
 }
 

@@ -4,7 +4,10 @@ import { Renderer } from '../src/3d/core/Renderer.js';
 import { Renderer2d } from '../src/2d/core/Renderer2d.js';
 import { acquireDeviceLease } from '../src/core/deviceLease.js';
 import { initWebGpu } from '../src/core/initWebGpu.js';
-import { srgbColorFormat } from '../src/core/rendererConfig.js';
+import {
+  drawingBufferSize,
+  srgbColorFormat,
+} from '../src/core/rendererConfig.js';
 import { srgbToLinear } from '../src/math/color.js';
 
 globalThis.GPUTextureUsage ??= { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2 };
@@ -15,6 +18,19 @@ test('preferred canvas formats map to compatible sRGB color views', () => {
   assert.equal(srgbColorFormat('bgra8unorm'), 'bgra8unorm-srgb');
   assert.equal(srgbColorFormat('rgba8unorm'), 'rgba8unorm-srgb');
   assert.throws(() => srgbColorFormat('rgba16float'), /Unsupported canvas/);
+});
+
+test('drawing buffer sizes stay within the device texture limit', () => {
+  assert.deepEqual(drawingBufferSize(4096, 512, 1024), {
+    width: 1024,
+    height: 512,
+  });
+  assert.deepEqual(drawingBufferSize(4096, 512), { width: 4096, height: 512 });
+  assert.deepEqual(drawingBufferSize(4096, 512, Number.NaN), {
+    width: 4096,
+    height: 512,
+  });
+  assert.deepEqual(drawingBufferSize(0, -5, 1024), { width: 1, height: 1 });
 });
 
 function attachmentDevice(created) {
@@ -73,6 +89,40 @@ test('2D MSAA follows a canvas resized by another shared renderer', () => {
   assert.equal(oldTarget.destroyed, true);
   assert.deepEqual(created[1].descriptor.size, [240, 160]);
   assert.equal(created[1].descriptor.format, 'bgra8unorm-srgb');
+});
+
+test('setSize clamps both renderers to the device texture limit', () => {
+  for (const RendererClass of [Renderer, Renderer2d]) {
+    const canvas = { width: 0, height: 0 };
+    const created = [];
+    const renderer = new RendererClass(canvas);
+    renderer.device = attachmentDevice(created);
+    renderer.device.limits = { maxTextureDimension2D: 1024 };
+    renderer.format = 'bgra8unorm';
+    renderer.colorFormat = 'bgra8unorm-srgb';
+
+    renderer.setSize(4096, 512);
+
+    assert.equal(canvas.width, 1024);
+    assert.equal(canvas.height, 512);
+    assert.ok(created.length > 0);
+    for (const texture of created) {
+      assert.deepEqual(texture.descriptor.size, [1024, 512]);
+    }
+  }
+});
+
+test('setSize still works on devices that do not report limits', () => {
+  const canvas = { width: 0, height: 0 };
+  const renderer = new Renderer(canvas);
+  renderer.device = attachmentDevice([]);
+  renderer.format = 'bgra8unorm';
+  renderer.colorFormat = 'bgra8unorm-srgb';
+
+  renderer.setSize(4096, 512);
+
+  assert.equal(canvas.width, 4096);
+  assert.equal(canvas.height, 512);
 });
 
 test('both renderers use sRGB swap views and linearized clear colors', () => {
