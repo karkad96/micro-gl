@@ -3,6 +3,7 @@ import {
   DEFAULT_FRONT_FACE,
   DEFAULT_PRIMITIVE_TOPOLOGY,
 } from '../../core/pipelineConstants.js';
+import { composeShaderCode } from '../../core/composeShaderCode.js';
 import {
   INSTANCED_SHAPE_SHADER_PREFIX,
   SHAPE_SHADER_PREFIX,
@@ -59,12 +60,12 @@ export class Material2d {
 
   /** Full WGSL source with `vs` and `fs` entry points. */
   get shaderCode() {
-    return Material2d.SHARED_WGSL + this.fragmentShader;
+    return composeShaderCode(Material2d.SHARED_WGSL, this.fragmentShader);
   }
 
   /** Full WGSL source whose vertex stage reads per-instance data. */
   get instancedShaderCode() {
-    return Material2d.INSTANCED_WGSL + this.fragmentShader;
+    return composeShaderCode(Material2d.INSTANCED_WGSL, this.fragmentShader);
   }
 
   /** Fragment-stage WGSL supplied by a concrete material. */
