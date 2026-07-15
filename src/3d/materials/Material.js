@@ -3,6 +3,7 @@ import {
   DEFAULT_FRONT_FACE,
   DEFAULT_PRIMITIVE_TOPOLOGY,
 } from '../../core/pipelineConstants.js';
+import { composeShaderCode } from '../../core/composeShaderCode.js';
 import { MAX_POINT_LIGHTS } from '../constants.js';
 import {
   INSTANCED_MESH_SHADER_PREFIX,
@@ -66,12 +67,12 @@ export class Material {
 
   /** Full WGSL source with `vs` and `fs` entry points. */
   get shaderCode() {
-    return Material.SHARED_WGSL + this.fragmentShader;
+    return composeShaderCode(Material.SHARED_WGSL, this.fragmentShader);
   }
 
   /** Full WGSL source whose vertex stage reads per-instance data. */
   get instancedShaderCode() {
-    return Material.INSTANCED_WGSL + this.fragmentShader;
+    return composeShaderCode(Material.INSTANCED_WGSL, this.fragmentShader);
   }
 
   /** Fragment-stage WGSL supplied by a concrete material. */

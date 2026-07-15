@@ -39,6 +39,7 @@ import {
   SHADER_BINDING,
   STRAIGHT_ALPHA_BLEND,
 } from '../src/core/pipelineConstants.js';
+import { composeShaderCode } from '../src/core/composeShaderCode.js';
 
 // Enough of a GPUDevice for the pipeline caches' constructors; the
 // guard under test throws before any pipeline is actually built.
@@ -52,6 +53,40 @@ const fakeDevice = {
 test('map-requiring materials refuse construction without one', () => {
   assert.throws(() => new TextureMaterial(), /requires/);
   assert.throws(() => new SpriteMaterial2d(), /requires/);
+});
+
+test('shader composition is memoized without mixing up its inputs', () => {
+  assert.equal(composeShaderCode('vertex;', 'fragment;'), 'vertex;fragment;');
+  // Repeats hit the cache; a two-level key cannot blur the boundary
+  // between prefix and fragment the way a concatenated key would.
+  assert.equal(composeShaderCode('vertex;', 'fragment;'), 'vertex;fragment;');
+  assert.equal(composeShaderCode('vertex;frag', 'ment;'), 'vertex;fragment;');
+  assert.equal(composeShaderCode('vertex;', 'other;'), 'vertex;other;');
+});
+
+test('material shader composition follows a customized shared prefix', () => {
+  const originalShared = Material.SHARED_WGSL;
+  const originalInstanced = Material.INSTANCED_WGSL;
+  try {
+    Material.SHARED_WGSL = '// custom\n' + originalShared;
+    Material.INSTANCED_WGSL = '// custom\n' + originalInstanced;
+    const material = new BasicMaterial();
+    assert.equal(
+      material.shaderCode,
+      Material.SHARED_WGSL + BASIC_FRAGMENT_SHADER,
+    );
+    assert.equal(
+      material.instancedShaderCode,
+      Material.INSTANCED_WGSL + BASIC_FRAGMENT_SHADER,
+    );
+  } finally {
+    Material.SHARED_WGSL = originalShared;
+    Material.INSTANCED_WGSL = originalInstanced;
+  }
+  assert.equal(
+    new BasicMaterial().shaderCode,
+    MESH_SHADER_PREFIX + BASIC_FRAGMENT_SHADER,
+  );
 });
 
 test('3D materials compose extracted vertex and fragment shader stages', () => {
