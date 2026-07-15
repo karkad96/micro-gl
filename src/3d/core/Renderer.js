@@ -201,9 +201,17 @@ export class Renderer {
     }
   }
 
-  /** Resizes the drawing buffer and depth texture. Pass CSS pixel dimensions. */
+  /**
+   * Resizes the drawing buffer and depth texture. Pass CSS pixel dimensions;
+   * they are scaled by the device pixel ratio and clamped to the device's
+   * maxTextureDimension2D limit.
+   */
   setSize(width, height) {
-    const size = drawingBufferSize(width, height);
+    const size = drawingBufferSize(
+      width,
+      height,
+      this.device?.limits?.maxTextureDimension2D,
+    );
     this.canvas.width = size.width;
     this.canvas.height = size.height;
 
