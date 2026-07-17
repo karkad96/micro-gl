@@ -263,6 +263,42 @@ export function create3dPixelFixture() {
   };
 }
 
+/** A white +Y plane lit only by one mutable directional light. */
+export function create3dDirectionalLightDirectionFixture() {
+  const geometry = new PlaneGeometry(3, 3);
+  const scene = new Scene();
+  scene.background = [0, 0, 0, 1];
+
+  const plane = new Mesh(
+    geometry,
+    new LambertMaterial({ color: [1, 1, 1, 1] }),
+  );
+  plane.receiveShadow = true;
+  scene.add(plane);
+
+  const light = new DirectionalLight([1, 1, 1], 1);
+  light.castShadow = true;
+  light.shadow.mapSize = 32;
+  light.shadow.camera.size = 2;
+  light.shadow.camera.near = 0.1;
+  light.shadow.camera.far = 10;
+  light.shadow.camera.lookAt(0, 0, 0);
+  scene.add(light);
+
+  const camera = new OrthographicCamera(1, 1, 0.1, 10);
+  camera.position.set(0, 3, 0);
+  camera.up.set(0, 0, -1);
+  camera.lookAt(0, 0, 0);
+
+  return {
+    scene,
+    camera,
+    geometries: new Set([geometry]),
+    objects: [plane],
+    light,
+  };
+}
+
 /**
  * A count-only scene that exercises renderer frustum decisions without
  * relying on rasterization details. The side mesh enters the camera after a

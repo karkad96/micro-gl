@@ -1,8 +1,12 @@
 import { srgbToLinear } from '../../math/color.js';
+import { Vec3 } from '../../math/Vec3.js';
 import { AmbientLight } from '../lights/AmbientLight.js';
 import { DirectionalLight } from '../lights/DirectionalLight.js';
 import { PointLight } from '../lights/PointLight.js';
 import { MAX_POINT_LIGHTS } from '../constants.js';
+import {
+  normalizeDirectionalLightDirection,
+} from './directionalLightDirection.js';
 
 const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 const VEC4_FLOATS = 4;
@@ -39,6 +43,7 @@ const FRAME_OFFSET = Object.freeze({
 export class FrameUniformWriter {
   constructor() {
     this.data = new Float32Array(FRAME_UNIFORM_SIZE / FLOAT_BYTES);
+    this._lightDirection = new Vec3();
   }
 
   write(scene, camera, device, buffer) {
@@ -96,20 +101,23 @@ export class FrameUniformWriter {
   }
 
   _writeDirectionalLight(light) {
+    const direction = normalizeDirectionalLightDirection(
+      this._lightDirection,
+      light?.direction,
+    );
+    writeVec3(
+      this.data,
+      FRAME_OFFSET.lightDirection,
+      direction.x,
+      direction.y,
+      direction.z,
+    );
+
     if (!light) {
-      writeVec3(this.data, FRAME_OFFSET.lightDirection, 0, -1, 0);
       writeVec3(this.data, FRAME_OFFSET.lightColor, 0, 0, 0);
       return;
     }
 
-    const length = light.direction.length() || 1;
-    writeVec3(
-      this.data,
-      FRAME_OFFSET.lightDirection,
-      light.direction.x / length,
-      light.direction.y / length,
-      light.direction.z / length,
-    );
     writeLinearColor(
       this.data,
       FRAME_OFFSET.lightColor,
