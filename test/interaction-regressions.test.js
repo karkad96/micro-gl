@@ -7,6 +7,7 @@ import { Mat4 } from '../src/math/Mat4.js';
 import { Object2d } from '../src/2d/core/Object2d.js';
 import { Object3d } from '../src/3d/core/Object3d.js';
 import { Shape2d } from '../src/2d/core/Shape2d.js';
+import { InstancedShape2d } from '../src/2d/core/InstancedShape2d.js';
 import { Mesh } from '../src/3d/core/Mesh.js';
 import { InstancedMesh } from '../src/3d/core/InstancedMesh.js';
 import { Camera2d } from '../src/2d/cameras/Camera2d.js';
@@ -192,6 +193,22 @@ test('2D picking skips singular transforms and directly passed hidden children',
   const hiddenControls = new DragControls2d([hiddenChild], camera, element);
   assert.equal(hiddenControls._pick(new Vec2(0, 0)), null);
   hiddenControls.dispose();
+});
+
+test('2D picking skips instanced shapes with no active instances', () => {
+  const camera = new Camera2d();
+  camera.updateMatrices();
+  const shape = new InstancedShape2d(new RectGeometry(2, 2), {}, 1);
+  shape.count = 0;
+  shape.updateWorldMatrix();
+  const controls = new DragControls2d(
+    [shape],
+    camera,
+    new FakeElement(),
+  );
+
+  assert.equal(controls._pick(new Vec2(0, 0)), null);
+  controls.dispose();
 });
 
 test('3D dragging is owned by the pointer that started it', () => {

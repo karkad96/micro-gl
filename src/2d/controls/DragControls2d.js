@@ -156,6 +156,7 @@ export class DragControls2d {
     let hit = null;
     for (const shape of this.objects) {
       if (!isVisibleInHierarchy(shape)) continue;
+      if (shape.isInstanced && shape.count === 0) continue;
       if (!_inverse.copy(shape.worldMatrix).tryInvert()) continue;
       _local.copy(point).applyMat3(_inverse);
       if (!shape.geometry.containsPoint(_local.x, _local.y)) continue;

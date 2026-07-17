@@ -120,11 +120,12 @@ export function create3dPipelineFixture(texture) {
     add(opaqueMesh);
     add(new Mesh(geometry, create(true)));
 
-    const opaqueInstances = new InstancedMesh(geometry, create(false), 2);
+    const opaqueInstances = new InstancedMesh(geometry, create(false), 3);
     opaqueInstances.castShadow = true;
     opaqueInstances.receiveShadow = true;
     opaqueInstances.setColorAt(0, [1, 0.8, 0.6]);
     opaqueInstances.setColorAt(1, [0.6, 0.8, 1]);
+    opaqueInstances.count = 2;
     add(opaqueInstances);
 
     const transparentInstances = new InstancedMesh(
@@ -208,9 +209,10 @@ export function create2dPipelineFixture(texture) {
   ];
   for (const createMaterial of materialCases) {
     add(new Shape2d(rect, createMaterial()));
-    const instances = new InstancedShape2d(rect, createMaterial(), 2);
+    const instances = new InstancedShape2d(rect, createMaterial(), 3);
     instances.setColorAt(0, [1, 0.75, 0.5, 0.8]);
     instances.setColorAt(1, [0.5, 0.75, 1, 0.8]);
+    instances.count = 2;
     add(instances);
   }
 
