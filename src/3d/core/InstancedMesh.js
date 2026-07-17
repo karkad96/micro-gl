@@ -5,6 +5,11 @@ import {
   INSTANCE_SIZE,
 } from '../constants.js';
 import { computeInstancedBounds } from './InstancedBounds.js';
+import {
+  validateInstanceCapacity,
+  validateInstanceCount,
+  validateInstanceIndex,
+} from '../../core/instanceCapacity.js';
 
 export { INSTANCE_SIZE } from '../constants.js';
 
@@ -20,26 +25,34 @@ export { INSTANCE_SIZE } from '../constants.js';
  * they mark the buffer for re-upload; set `needsUpdate = true` yourself
  * only if you write `instanceData` directly.
  *
- * The instance count is fixed at construction. To show fewer instances,
- * scale the extras to zero; to grow, make a new InstancedMesh.
+ * `capacity` is fixed at construction because it determines the CPU and GPU
+ * allocation. `count` starts at that capacity and can be changed from 0 to
+ * `capacity` to draw only the first part of the allocation. To grow beyond
+ * the capacity, make a new InstancedMesh.
  *
  * Raycaster tests every instance transform and includes `instanceId` in
  * instanced hits. DragControls still moves the InstancedMesh as one batch.
  */
 export class InstancedMesh extends Mesh {
-  constructor(geometry, material, count) {
+  constructor(geometry, material, capacity) {
     super(geometry, material);
     this.isInstanced = true;
-    this.count = count;
-    this.instanceData = new Float32Array(count * INSTANCE_SIZE);
+    this._capacity = validateInstanceCapacity(
+      capacity,
+      'InstancedMesh',
+    );
+    this._count = this._capacity;
+    this._instanceData = new Float32Array(
+      this._capacity * INSTANCE_SIZE,
+    );
     // Every instance starts as an identity matrix with a white color.
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < this._capacity; i++) {
       const base = i * INSTANCE_SIZE;
-      this.instanceData[base] = 1;
-      this.instanceData[base + 5] = 1;
-      this.instanceData[base + 10] = 1;
-      this.instanceData[base + 15] = 1;
-      this.instanceData.fill(
+      this._instanceData[base] = 1;
+      this._instanceData[base + 5] = 1;
+      this._instanceData[base + 10] = 1;
+      this._instanceData[base + 15] = 1;
+      this._instanceData.fill(
         1,
         base + INSTANCE_COLOR_OFFSET,
         base + INSTANCE_SIZE,
@@ -54,6 +67,32 @@ export class InstancedMesh extends Mesh {
     this._instanceBoundsSource = null;
     this._instanceBoundsRevision = -1;
     this._instanceBoundsCount = -1;
+  }
+
+  /** Maximum number of instances; fixed for this object's lifetime. */
+  get capacity() {
+    return this._capacity;
+  }
+
+  /** Number of leading instance records submitted by each draw call. */
+  get count() {
+    return this._count;
+  }
+
+  set count(value) {
+    this._count = validateInstanceCount(
+      value,
+      this._capacity,
+      'InstancedMesh',
+    );
+  }
+
+  /**
+   * Fixed-size instance storage. Its elements are mutable, but the array
+   * itself cannot be replaced because its byte length defines GPU capacity.
+   */
+  get instanceData() {
+    return this._instanceData;
   }
 
   /**
@@ -95,7 +134,8 @@ export class InstancedMesh extends Mesh {
 
   /** Copies a Mat4 into instance `index`'s transform. */
   setMatrixAt(index, matrix) {
-    this.instanceData.set(matrix.elements, index * INSTANCE_SIZE);
+    validateInstanceIndex(index, this._capacity, 'InstancedMesh');
+    this._instanceData.set(matrix.elements, index * INSTANCE_SIZE);
     this._markInstanceDataUpdated(true);
     return this;
   }
@@ -107,11 +147,12 @@ export class InstancedMesh extends Mesh {
    * values if you fill `instanceData` directly instead.
    */
   setColorAt(index, color) {
+    validateInstanceIndex(index, this._capacity, 'InstancedMesh');
     const base = index * INSTANCE_SIZE + INSTANCE_COLOR_OFFSET;
-    this.instanceData[base] = srgbToLinear(color[0]);
-    this.instanceData[base + 1] = srgbToLinear(color[1]);
-    this.instanceData[base + 2] = srgbToLinear(color[2]);
-    this.instanceData[base + 3] = color.length > 3 ? color[3] : 1;
+    this._instanceData[base] = srgbToLinear(color[0]);
+    this._instanceData[base + 1] = srgbToLinear(color[1]);
+    this._instanceData[base + 2] = srgbToLinear(color[2]);
+    this._instanceData[base + 3] = color.length > 3 ? color[3] : 1;
     this._markInstanceDataUpdated(false);
     return this;
   }

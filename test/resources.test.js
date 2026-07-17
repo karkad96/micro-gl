@@ -2,8 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GpuResources } from '../src/3d/core/GpuResources.js';
 import { GpuResources2d } from '../src/2d/core/GpuResources2d.js';
-import { InstancedMesh } from '../src/3d/core/InstancedMesh.js';
-import { InstancedShape2d } from '../src/2d/core/InstancedShape2d.js';
+import {
+  InstancedMesh,
+  INSTANCE_SIZE,
+} from '../src/3d/core/InstancedMesh.js';
+import {
+  InstancedShape2d,
+  INSTANCE_SIZE_2D,
+} from '../src/2d/core/InstancedShape2d.js';
 import { Geometry } from '../src/3d/geometries/Geometry.js';
 import { Geometry2d } from '../src/2d/geometries/Geometry2d.js';
 import { Texture } from '../src/core/Texture.js';
@@ -180,29 +186,36 @@ test('textures are uploaded, cached and disposed per device', () => {
 const instanceCases = [
   {
     label: 'InstancedMesh',
+    instanceSize: INSTANCE_SIZE,
     ResourceClass: GpuResources,
-    create() {
+    create(capacity = 1) {
       return new InstancedMesh(
         new Geometry([0, 0, 0, 0, 0, 1, 0, 0], [0]),
         { map: null },
-        1,
+        capacity,
       );
     },
   },
   {
     label: 'InstancedShape2d',
+    instanceSize: INSTANCE_SIZE_2D,
     ResourceClass: GpuResources2d,
-    create() {
+    create(capacity = 1) {
       return new InstancedShape2d(
         new Geometry2d([0, 0, 0, 0], [0]),
         { map: null },
-        1,
+        capacity,
       );
     },
   },
 ];
 
-for (const { label, ResourceClass, create } of instanceCases) {
+for (const {
+  label,
+  instanceSize,
+  ResourceClass,
+  create,
+} of instanceCases) {
   test(`${label} resources are manager-local and fresh buffers upload`, () => {
     const device = fakeDevice('shared');
     const resourcesA = resourcesFor(ResourceClass, device);
@@ -280,6 +293,29 @@ for (const { label, ResourceClass, create } of instanceCases) {
     assert.equal(object._gpu.get(resourcesB), gpuB);
     assert.equal(resourcesA._objectGpuResourceRefs.size, 0);
     assert.equal(resourcesB._objectGpuResourceRefs.size, 1);
+  });
+
+  test(`${label} GPU allocation stays at fixed capacity`, () => {
+    const device = fakeDevice(label);
+    const resources = resourcesFor(ResourceClass, device);
+    const object = create(3);
+    object.count = 1;
+
+    const gpu = objectGpuFor(resources, object);
+    assert.equal(
+      gpu.instanceBuffer.descriptor.size,
+      3 * instanceSize * Float32Array.BYTES_PER_ELEMENT,
+    );
+
+    object.count = object.capacity;
+    const reused = objectGpuFor(resources, object);
+    assert.equal(reused.instanceBuffer, gpu.instanceBuffer);
+    assert.equal(
+      device.writes.filter(
+        ({ buffer }) => buffer === gpu.instanceBuffer,
+      ).length,
+      1,
+    );
   });
 }
 

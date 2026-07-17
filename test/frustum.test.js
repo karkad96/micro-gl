@@ -145,6 +145,14 @@ test('InstancedMesh caches and invalidates conservative batch bounds', () => {
   });
   assert.equal(mesh.bounds, outsideBounds);
 
+  mesh.count = 1;
+  assert.deepEqual(mesh.bounds, {
+    min: [9.5, -0.5, -0.5],
+    max: [10.5, 0.5, 0.5],
+  });
+  mesh.count = 2;
+  assert.deepEqual(mesh.bounds, outsideBounds);
+
   mesh.setMatrixAt(0, matrix.identity());
   const mixedBounds = mesh.bounds;
   assert.notEqual(mixedBounds, outsideBounds);
@@ -231,6 +239,7 @@ test('instanced batches draw fully when any instance intersects', () => {
   mixed.setMatrixAt(0, matrix.makeTranslation(20, 0, -3));
   mixed.setMatrixAt(1, matrix.makeTranslation(0, 0, -3));
   mixed.setMatrixAt(2, matrix.makeTranslation(22, 0, -3));
+  mixed.count = 2;
   scene.add(outside).add(mixed);
 
   const renderer = new Renderer({});
@@ -240,7 +249,7 @@ test('instanced batches draw fully when any instance intersects', () => {
   renderer._collectMeshes(scene, camera);
 
   assert.deepEqual(renderer._opaqueList, [mixed]);
-  assert.equal(renderer.drawCount, 3);
+  assert.equal(renderer.drawCount, 2);
 });
 
 test('main and directional shadow frusta collect meshes independently', () => {

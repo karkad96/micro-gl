@@ -268,7 +268,12 @@ export class Renderer2d {
     const drawList = this._drawList;
     drawList.length = 0;
     scene.traverseVisible((object) => {
-      if (object instanceof Shape2d) drawList.push(object);
+      if (
+        object instanceof Shape2d &&
+        !(object.isInstanced && object.count === 0)
+      ) {
+        drawList.push(object);
+      }
     });
     // sort() is stable, so equal zIndex values preserve scene order.
     drawList.sort((a, b) => a.zIndex - b.zIndex);
