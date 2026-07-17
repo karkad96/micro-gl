@@ -1,23 +1,26 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>micro-gl — WebGPU demo</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <canvas id="canvas"></canvas>
-    <div id="hud">
-      <button id="btn-3d" class="active">3D scene</button>
-      <button id="btn-2d">2D scene</button>
-      <button id="btn-stress">Stress: off</button>
-    </div>
-    <div id="fps">
-      <div><span class="num" id="fps-value">--</span> fps</div>
-      <div id="fps-detail">-- ms &middot; 0 objects</div>
-    </div>
-    <div id="error"></div>
-    <script type="module" src="./main.js"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>micro-gl — WebGPU demo</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="hud">
+    <button id="btn-3d" class="active">3D scene</button>
+    <button id="btn-2d">2D scene</button>
+    <button id="btn-stress">Stress: off</button>
+  </div>
+  <div id="fps">
+    <div><span class="num" id="fps-value">--</span> fps</div>
+    <div id="fps-detail">-- ms &middot; 0 objects</div>
+  </div>
+  <div id="error"></div>
+  <script type="module" src="./examples/main.js"></script>
+</body>
+
 </html>

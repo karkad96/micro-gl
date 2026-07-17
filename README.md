@@ -13,7 +13,7 @@ in a large framework.
 - Separate 2D and 3D renderers with a familiar scene/object model
 - Perspective, orthographic, and 2D cameras
 - Built-in geometry, materials, textures, transparency, and MSAA
-- Directional, ambient, and point lights with directional shadows
+-  , ambient, and point lights with directional shadows
 - Scene hierarchies, frustum culling, raycasting, and drag controls
 - Instanced 2D and 3D drawing for large object counts
 - Mouse, touch, and trackpad camera controls
