@@ -8,6 +8,7 @@ import {
   LambertMaterial,
   initWebGpu,
 } from '../src/index.js';
+import { Pipelines2d } from '../src/2d/core/Pipelines2d.js';
 import {
   create2dPipelineFixture,
   create2dGrayClearFixture,
@@ -131,6 +132,14 @@ async function runSmokeTest() {
       )),
     );
     pass(checks, 'compiled all 10 stock regular/instanced WGSL modules');
+
+    await gpuPhase(device, 'custom 2D frame-uniform fragment pipeline', () => {
+      const pipelines = new Pipelines2d(device, gpu.colorFormat);
+      const material = new FrameUniformFragmentMaterial2d();
+      pipelines.pipelineFor(material);
+      pipelines.pipelineFor(material, true);
+    });
+    pass(checks, 'compiled custom 2D fragments that read frame uniforms');
 
     const pipelineReports = {};
     await gpuPhase(device, '4x MSAA pipeline rendering', async () => {
@@ -548,6 +557,20 @@ async function validateStockShaderModules(device, texture) {
     }
   }
   return warnings;
+}
+
+const FRAME_UNIFORM_FRAGMENT_SHADER_2D = /* wgsl */ `
+@fragment
+fn fs(input: VertexOut) -> @location(0) vec4f {
+  let cameraScale = uFrame.viewProjection[0][0];
+  return vec4f(vec3f(cameraScale), objectColor(input).a);
+}
+`;
+
+class FrameUniformFragmentMaterial2d extends BasicMaterial2d {
+  get fragmentShader() {
+    return FRAME_UNIFORM_FRAGMENT_SHADER_2D;
+  }
 }
 
 async function gpuPhase(device, label, operation) {

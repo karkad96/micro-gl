@@ -42,9 +42,13 @@ export class Pipelines2d {
 
     Object.assign(
       this,
-      createMaterialPipelineLayouts(device, GPUShaderStage.VERTEX, {
-        label: '2D material',
-      }),
+      createMaterialPipelineLayouts(
+        device,
+        // The shared Material2d interface exposes uFrame to custom fragment
+        // stages as well as the stock vertex stages.
+        GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        { label: '2D material' },
+      ),
     );
   }
 

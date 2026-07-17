@@ -16,6 +16,7 @@ import {
  * Every 2D shader shares the same uniform interface:
  *   @group(0) — per-frame data (the camera's view-projection Mat3)
  *   @group(1) — per-object data (world transform + color)
+ * Custom fragment stages may read both groups.
  * There are no lights or normals. Mat3 uniforms use WGSL's padded
  * 16-byte column layout, which is the layout `Mat3.elements` stores.
  */

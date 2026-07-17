@@ -88,6 +88,21 @@ test('pipelines and shader modules carry material-identifying labels', () => {
   assert.match(instanced.descriptor.layout.descriptor.label, /2D material/);
 });
 
+test('2D frame uniforms are visible to custom fragment stages', () => {
+  const pipelines = new Pipelines2d(
+    pipelineBuildingDevice(),
+    'bgra8unorm-srgb',
+  );
+  const [frameUniforms] =
+    pipelines.frameBindGroupLayout.descriptor.entries;
+
+  assert.equal(frameUniforms.binding, SHADER_BINDING.uniforms);
+  assert.equal(
+    frameUniforms.visibility,
+    GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+  );
+});
+
 test('shader composition is memoized without mixing up its inputs', () => {
   assert.equal(composeShaderCode('vertex;', 'fragment;'), 'vertex;fragment;');
   // Repeats hit the cache; a two-level key cannot blur the boundary
