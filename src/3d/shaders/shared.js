@@ -37,7 +37,7 @@ struct PointLightUniform {
 
 struct FrameUniforms {
   viewProjection: mat4x4f,
-  lightDirection: vec3f,
+  lightDirection: vec3f, // finite unit vector normalized by the renderer
   lightColor: vec3f,
   ambientColor: vec3f,
   // Packs into ambientColor's 16-byte slot; how many array entries are live.
@@ -110,7 +110,7 @@ fn directionalShadow(n: vec3f, worldPosition: vec3f) -> f32 {
 // color by this.
 fn diffuseLighting(n: vec3f, worldPosition: vec3f) -> vec3f {
   var lighting = uFrame.ambientColor;
-  let toLight = normalize(-uFrame.lightDirection);
+  let toLight = -uFrame.lightDirection;
   let shadow = directionalShadow(n, worldPosition);
   lighting += max(dot(n, toLight), 0.0) * uFrame.lightColor * shadow;
   let count = u32(uFrame.pointLightCount);

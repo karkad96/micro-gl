@@ -187,6 +187,58 @@ test('shadow maps upload camera parameters, resize lazily and disable cleanly', 
   ]);
 });
 
+test('shadow cameras share the finite directional-light policy', () => {
+  const device = fakeGpuDevice();
+  const shadowMap = new DirectionalShadowMap(device, {}, {});
+  const light = new DirectionalLight();
+  light.castShadow = true;
+  light.shadow.mapSize = 32;
+  light.shadow.camera.lookAt(2, 3, 4);
+  const diagonal = 1 / Math.sqrt(3);
+  const cases = [
+    {
+      label: 'huge finite',
+      value: [Number.MAX_VALUE, -Number.MAX_VALUE, Number.MAX_VALUE],
+      expected: [diagonal, -diagonal, diagonal],
+    },
+    { label: 'zero', value: [0, 0, 0], expected: [0, -1, 0] },
+    {
+      label: 'near zero',
+      value: [1e-13, -1e-13, 0],
+      expected: [0, -1, 0],
+    },
+    { label: 'NaN', value: [1, NaN, 0], expected: [0, -1, 0] },
+    {
+      label: 'infinity',
+      value: [1, -1, Infinity],
+      expected: [0, -1, 0],
+    },
+  ];
+  const camera = light.shadow.camera;
+  const distance = (camera.near + camera.far) / 2;
+
+  for (const { label, value, expected } of cases) {
+    light.direction.set(...value);
+    assert.equal(shadowMap.update(light), true, label);
+
+    const cameraDirection = [
+      (camera.target.x - camera.position.x) / distance,
+      (camera.target.y - camera.position.y) / distance,
+      (camera.target.z - camera.position.z) / distance,
+    ];
+    assertVectorClose(cameraDirection, expected, label);
+    assert.ok(
+      latestUniformWrite(device)
+        .slice(
+          SHADOW_UNIFORM_OFFSET.viewProjection,
+          SHADOW_UNIFORM_OFFSET.enabled,
+        )
+        .every(Number.isFinite),
+      `${label}: shadow matrix is finite`,
+    );
+  }
+});
+
 test('invalid directional shadow configuration fails before rendering', () => {
   const device = fakeGpuDevice({ maxTextureDimension2D: 512 });
   const shadowMap = new DirectionalShadowMap(device, {}, {});
@@ -368,6 +420,15 @@ function assertInvalidShadow(shadowMap, configure, expected) {
   light.shadow.mapSize = 256;
   configure(light);
   assert.throws(() => shadowMap.update(light), expected);
+}
+
+function assertVectorClose(actual, expected, label) {
+  for (let index = 0; index < expected.length; index++) {
+    assert.ok(
+      Math.abs(actual[index] - expected[index]) < 1e-6,
+      `${label}: component ${index} expected ${expected[index]}, got ${actual[index]}`,
+    );
+  }
 }
 
 function latestUniformWrite(device) {

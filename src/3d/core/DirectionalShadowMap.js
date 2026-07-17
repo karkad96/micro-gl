@@ -12,6 +12,9 @@ import {
   SHADOW_SAMPLE_COUNT,
 } from '../constants.js';
 import { ShadowPipelines } from './ShadowPipelines.js';
+import {
+  normalizeDirectionalLightDirection,
+} from './directionalLightDirection.js';
 
 const FLOAT_BYTES = Float32Array.BYTES_PER_ELEMENT;
 const MAT4_FLOATS = 16;
@@ -20,7 +23,6 @@ const SHADOW_UNIFORM_FLOATS = MAT4_FLOATS + PARAM_FLOATS;
 const SHADOW_UNIFORM_SIZE = SHADOW_UNIFORM_FLOATS * FLOAT_BYTES;
 const SHADOW_MAP_FALLBACK_SIZE = 1;
 const SHADOW_DEPTH_CLEAR_VALUE = 1;
-const DIRECTION_EPSILON = 1e-12;
 
 export const SHADOW_UNIFORM_OFFSET = Object.freeze({
   viewProjection: 0,
@@ -118,12 +120,7 @@ export class DirectionalShadowMap {
     }
 
     const camera = shadow.camera;
-    const directionLength = light.direction.length();
-    if (Number.isFinite(directionLength) && directionLength > DIRECTION_EPSILON) {
-      this._direction.copy(light.direction).multiplyScalar(1 / directionLength);
-    } else {
-      this._direction.set(0, -1, 0);
-    }
+    normalizeDirectionalLightDirection(this._direction, light.direction);
 
     const distance = (camera.near + camera.far) / 2;
     camera.position.copy(camera.target);

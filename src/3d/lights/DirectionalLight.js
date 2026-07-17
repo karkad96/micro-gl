@@ -16,7 +16,10 @@ export class DirectionalLight extends Object3d {
     super();
     this.color = color;
     this.intensity = intensity;
-    /** The direction the light travels in (it gets normalized by the renderer). */
+    /**
+     * The direction the light travels in. The renderer normalizes finite
+     * values; invalid or effectively zero directions fall back to (0, -1, 0).
+     */
     this.direction = new Vec3(-1, -1, -1);
     /** Enable the renderer's directional shadow pass for this light. */
     this.castShadow = false;

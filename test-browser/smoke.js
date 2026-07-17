@@ -16,6 +16,7 @@ import {
   create2dOpaqueGrayFixture,
   create2dPixelFixture,
   create2dTransparencyFixture,
+  create3dDirectionalLightDirectionFixture,
   create3dFrustumCullingFixture,
   create3dMsaaResolveFixture,
   create3dPipelineFixture,
@@ -57,6 +58,7 @@ async function runSmokeTest() {
   let fixture3d = null;
   let fixture2d = null;
   let pixelFixture3d = null;
+  let directionalLightFixture3d = null;
   let frustumFixture3d = null;
   let shadowPixelFixture3d = null;
   let pixelFixture2d = null;
@@ -91,6 +93,7 @@ async function runSmokeTest() {
     fixture3d = create3dPipelineFixture(texture);
     fixture2d = create2dPipelineFixture(texture);
     pixelFixture3d = create3dPixelFixture();
+    directionalLightFixture3d = create3dDirectionalLightDirectionFixture();
     frustumFixture3d = create3dFrustumCullingFixture();
     shadowPixelFixture3d = create3dShadowPixelFixture();
     pixelFixture2d = create2dPixelFixture();
@@ -215,6 +218,7 @@ async function runSmokeTest() {
 
     let redPixel;
     let greenPixel;
+    const directionalLightPixels = {};
     let litGroundPixel;
     let shadowedGroundPixel;
     await gpuPhase(device, 'known-pixel rendering', async () => {
@@ -239,6 +243,38 @@ async function runSmokeTest() {
       assertDominantColor(greenPixel, 1, '2D green center pixel');
     });
     pass(checks, 'read back known red 3D and green 2D pixels');
+
+    await gpuPhase(device, 'invalid directional-light rendering', async () => {
+      for (const [label, direction, expectedGray] of [
+        ['zero', [0, 0, 0], 255],
+        ['NaN', [1, NaN, 0], 255],
+        ['infinity', [1, -1, Infinity], 255],
+        [
+          'huge finite',
+          [Number.MAX_VALUE, -Number.MAX_VALUE, Number.MAX_VALUE],
+          200,
+        ],
+      ]) {
+        directionalLightFixture3d.light.direction.set(...direction);
+        singleSample3d.render(
+          directionalLightFixture3d.scene,
+          directionalLightFixture3d.camera,
+        );
+        const pixel = await readCenterPixel(
+          device,
+          gpu.context,
+          gpu.format,
+          canvas.width,
+          canvas.height,
+        );
+        assertGrayPixel(pixel, expectedGray, `${label} light direction`);
+        directionalLightPixels[label] = pixel;
+      }
+    });
+    pass(
+      checks,
+      'normalized huge directional lights and safely handled invalid ones',
+    );
 
     const transparencyPixels = {};
     const msaaResolvePixels = {};
@@ -384,6 +420,7 @@ async function runSmokeTest() {
       pixels: {
         red3d: redPixel,
         green2d: greenPixel,
+        directionalLights3d: directionalLightPixels,
         transparency: transparencyPixels,
         msaaResolve: msaaResolvePixels,
         opaqueGray2d: opaqueGrayPixel,
@@ -397,6 +434,9 @@ async function runSmokeTest() {
     if (fixture3d) disposeFixture(fixture3d);
     if (fixture2d) disposeFixture(fixture2d);
     if (pixelFixture3d) disposeFixture(pixelFixture3d);
+    if (directionalLightFixture3d) {
+      disposeFixture(directionalLightFixture3d);
+    }
     if (frustumFixture3d) disposeFixture(frustumFixture3d);
     if (shadowPixelFixture3d) disposeFixture(shadowPixelFixture3d);
     if (pixelFixture2d) disposeFixture(pixelFixture2d);
