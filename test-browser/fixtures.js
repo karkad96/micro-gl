@@ -10,6 +10,7 @@ import {
   Geometry,
   Geometry2d,
   GridHelper,
+  GridHelper2d,
   InstancedMesh,
   InstancedShape2d,
   LambertMaterial,
@@ -215,6 +216,8 @@ export function create2dPipelineFixture(texture) {
     geometries,
     new ArrowGeometry2d(1.2, 0.12, 0.35, 0.32),
   );
+  const grid = new GridHelper2d(1.2, 2, [0.7, 0.75, 0.9]);
+  geometries.add(grid.geometry);
 
   let placement = 0;
   const add = (object) => {
@@ -251,6 +254,7 @@ export function create2dPipelineFixture(texture) {
       new BasicMaterial2d({ color: [0.2, 0.8, 1] }),
     ),
   );
+  add(grid);
 
   for (const topology of [
     'triangle-strip',
@@ -275,7 +279,7 @@ export function create2dPipelineFixture(texture) {
     camera: new Camera2d(5, 1),
     geometries,
     objects,
-    expectedDrawCount: 12,
+    expectedDrawCount: 13,
     expectedPipelineCount: 8,
     expectedShaderModuleCount: 4,
   };

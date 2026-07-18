@@ -70,3 +70,5 @@ export { ArrowGeometry2d } from './2d/geometries/ArrowGeometry2d.js';
 export { Material2d } from './2d/materials/Material2d.js';
 export { BasicMaterial2d } from './2d/materials/BasicMaterial2d.js';
 export { SpriteMaterial2d } from './2d/materials/SpriteMaterial2d.js';
+
+export { GridHelper2d } from './2d/helpers/GridHelper2d.js';
