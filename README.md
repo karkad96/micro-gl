@@ -232,3 +232,7 @@ uses Chrome or Edge to compile and render the real WebGPU pipelines. Before
 running it for the first time, copy `.env.example` to `.env` and set
 `MICRO_GL_BROWSER_PATH` to the browser executable's absolute path. The runner
 does not auto-detect browsers.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
