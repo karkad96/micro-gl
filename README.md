@@ -228,5 +228,7 @@ npm run test:webgpu
 ```
 
 `npm test` runs the Node unit and regression suite. `npm run test:webgpu`
-uses an installed Chrome or Edge browser to compile and render the real WebGPU
-pipelines.
+uses Chrome or Edge to compile and render the real WebGPU pipelines. Before
+running it for the first time, copy `.env.example` to `.env` and set
+`MICRO_GL_BROWSER_PATH` to the browser executable's absolute path. The runner
+does not auto-detect browsers.

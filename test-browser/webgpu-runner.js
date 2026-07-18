@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { extname, join, resolve, sep } from 'node:path';
+import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
@@ -20,11 +20,17 @@ test(
   'stock pipelines compile and render in a real WebGPU browser',
   { timeout: TEST_TIMEOUT_MS },
   async (t) => {
-    const browserPath = findBrowserPath();
+    const browserPath = process.env.MICRO_GL_BROWSER_PATH;
     if (!browserPath) {
       return skipOrFail(
         t,
-        'No Chrome/Edge executable found; set MICRO_GL_BROWSER_PATH',
+        'Browser executable is not configured; copy .env.example to .env and set MICRO_GL_BROWSER_PATH',
+      );
+    }
+    if (!existsSync(browserPath)) {
+      return skipOrFail(
+        t,
+        `Configured browser executable does not exist: ${browserPath}`,
       );
     }
 
@@ -155,48 +161,6 @@ async function withTimeout(promise, timeoutMs, message) {
   } finally {
     clearTimeout(timeout);
   }
-}
-
-function findBrowserPath() {
-  const env = process.env;
-  const candidates = [
-    env.MICRO_GL_BROWSER_PATH,
-    pathIn(env.ProgramFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    pathIn(
-      env['ProgramFiles(x86)'],
-      'Google',
-      'Chrome',
-      'Application',
-      'chrome.exe',
-    ),
-    pathIn(env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    pathIn(
-      env.ProgramFiles,
-      'Microsoft',
-      'Edge',
-      'Application',
-      'msedge.exe',
-    ),
-    pathIn(
-      env['ProgramFiles(x86)'],
-      'Microsoft',
-      'Edge',
-      'Application',
-      'msedge.exe',
-    ),
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/microsoft-edge',
-  ];
-  return [...new Set(candidates.filter(Boolean))].find(existsSync) || null;
-}
-
-function pathIn(base, ...parts) {
-  return base ? join(base, ...parts) : null;
 }
 
 function defaultBrowserArgs() {
