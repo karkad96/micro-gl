@@ -34,6 +34,8 @@ export { Geometry } from './3d/geometries/Geometry.js';
 export { BoxGeometry } from './3d/geometries/BoxGeometry.js';
 export { SphereGeometry } from './3d/geometries/SphereGeometry.js';
 export { PlaneGeometry } from './3d/geometries/PlaneGeometry.js';
+export { LineGeometry } from './3d/geometries/LineGeometry.js';
+export { ArrowGeometry } from './3d/geometries/ArrowGeometry.js';
 export { WireframeGeometry } from './3d/geometries/WireframeGeometry.js';
 
 export { Material, MAX_POINT_LIGHTS } from './3d/materials/Material.js';
@@ -62,6 +64,8 @@ export { DragControls2d } from './2d/controls/DragControls2d.js';
 export { Geometry2d } from './2d/geometries/Geometry2d.js';
 export { RectGeometry } from './2d/geometries/RectGeometry.js';
 export { CircleGeometry } from './2d/geometries/CircleGeometry.js';
+export { LineGeometry2d } from './2d/geometries/LineGeometry2d.js';
+export { ArrowGeometry2d } from './2d/geometries/ArrowGeometry2d.js';
 
 export { Material2d } from './2d/materials/Material2d.js';
 export { BasicMaterial2d } from './2d/materials/BasicMaterial2d.js';

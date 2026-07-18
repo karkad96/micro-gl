@@ -9,3 +9,14 @@ test('the package name resolves to the complete public entry point', () => {
     assert.equal(packageEntry[name], sourceEntry[name], name);
   }
 });
+
+test('line and arrow geometries are part of the public API', () => {
+  for (const name of [
+    'LineGeometry',
+    'ArrowGeometry',
+    'LineGeometry2d',
+    'ArrowGeometry2d',
+  ]) {
+    assert.equal(typeof packageEntry[name], 'function', name);
+  }
+});
