@@ -10,12 +10,14 @@ test('the package name resolves to the complete public entry point', () => {
   }
 });
 
-test('line and arrow geometries are part of the public API', () => {
+test('line, arrow and grid helpers are part of the public API', () => {
   for (const name of [
     'LineGeometry',
     'ArrowGeometry',
     'LineGeometry2d',
     'ArrowGeometry2d',
+    'GridHelper',
+    'GridHelper2d',
   ]) {
     assert.equal(typeof packageEntry[name], 'function', name);
   }
