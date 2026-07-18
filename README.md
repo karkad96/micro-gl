@@ -155,7 +155,7 @@ requestAnimationFrame(frame);
 - **Scene and objects:** `Scene`, `Object3d`, `Mesh`, `InstancedMesh`
 - **Cameras:** `PerspectiveCamera`, `OrthographicCamera`
 - **Geometry:** `BoxGeometry`, `SphereGeometry`, `PlaneGeometry`,
-  `WireframeGeometry`, `Geometry`
+  `LineGeometry`, `ArrowGeometry`, `WireframeGeometry`, `Geometry`
 - **Materials:** `BasicMaterial`, `LambertMaterial`, `TextureMaterial`
 - **Lighting:** `DirectionalLight`, `AmbientLight`, `PointLight`
 - **Interaction:** `OrbitControls`, `DragControls`, `Raycaster`
@@ -165,9 +165,17 @@ requestAnimationFrame(frame);
 
 - **Scene and objects:** `Scene2d`, `Object2d`, `Shape2d`, `InstancedShape2d`
 - **Camera:** `Camera2d`
-- **Geometry:** `RectGeometry`, `CircleGeometry`, `Geometry2d`
+- **Geometry:** `RectGeometry`, `CircleGeometry`, `LineGeometry2d`,
+  `ArrowGeometry2d`, `Geometry2d`
 - **Materials:** `BasicMaterial2d`, `SpriteMaterial2d`
 - **Interaction:** `PanZoomControls`, `DragControls2d`
+
+`LineGeometry(length = 1, thickness = 0.05, radialSegments = 8)` and
+`ArrowGeometry(length = 1, shaftWidth = 0.05, headLength = 0.25,
+headWidth = 0.2, radialSegments = 8)` have matching 2D variants without
+`radialSegments`. They run along local X and are centered over their full
+length. These are filled meshes with world-space thickness, so they use the
+default `triangle-list` material topology.
 
 ### Shared
 

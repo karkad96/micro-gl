@@ -1,5 +1,7 @@
 import {
   AmbientLight,
+  ArrowGeometry,
+  ArrowGeometry2d,
   BasicMaterial,
   BasicMaterial2d,
   BoxGeometry,
@@ -11,6 +13,8 @@ import {
   InstancedMesh,
   InstancedShape2d,
   LambertMaterial,
+  LineGeometry,
+  LineGeometry2d,
   Material,
   Material2d,
   Mat4,
@@ -60,6 +64,14 @@ export function create3dPipelineFixture(texture) {
   const stripGeometry = rememberGeometry(
     geometries,
     create3dTopologyGeometry(),
+  );
+  const line = rememberGeometry(
+    geometries,
+    new LineGeometry(1.2, 0.12, 6),
+  );
+  const arrow = rememberGeometry(
+    geometries,
+    new ArrowGeometry(1.2, 0.12, 0.35, 0.32, 6),
   );
 
   scene.add(new AmbientLight([0.3, 0.35, 0.45], 0.35));
@@ -138,6 +150,9 @@ export function create3dPipelineFixture(texture) {
     add(transparentInstances);
   }
 
+  add(new Mesh(line, new BasicMaterial({ color: [0.95, 0.75, 0.15] })));
+  add(new Mesh(arrow, new BasicMaterial({ color: [0.2, 0.8, 1] })));
+
   const grid = new GridHelper(1, 2, [0.7, 0.75, 0.9]);
   geometries.add(grid.geometry);
   add(grid);
@@ -173,7 +188,7 @@ export function create3dPipelineFixture(texture) {
     camera,
     geometries,
     objects,
-    expectedDrawCount: 22,
+    expectedDrawCount: 24,
     expectedPipelineCount: 16,
     expectedShaderModuleCount: 6,
     expectedShadowDrawCount: 10,
@@ -191,6 +206,14 @@ export function create2dPipelineFixture(texture) {
   const topologyGeometry = rememberGeometry(
     geometries,
     create2dTopologyGeometry(),
+  );
+  const line = rememberGeometry(
+    geometries,
+    new LineGeometry2d(1.2, 0.12),
+  );
+  const arrow = rememberGeometry(
+    geometries,
+    new ArrowGeometry2d(1.2, 0.12, 0.35, 0.32),
   );
 
   let placement = 0;
@@ -216,6 +239,19 @@ export function create2dPipelineFixture(texture) {
     add(instances);
   }
 
+  add(
+    new Shape2d(
+      line,
+      new BasicMaterial2d({ color: [0.95, 0.75, 0.15] }),
+    ),
+  );
+  add(
+    new Shape2d(
+      arrow,
+      new BasicMaterial2d({ color: [0.2, 0.8, 1] }),
+    ),
+  );
+
   for (const topology of [
     'triangle-strip',
     'line-strip',
@@ -239,7 +275,7 @@ export function create2dPipelineFixture(texture) {
     camera: new Camera2d(5, 1),
     geometries,
     objects,
-    expectedDrawCount: 10,
+    expectedDrawCount: 12,
     expectedPipelineCount: 8,
     expectedShaderModuleCount: 4,
   };
