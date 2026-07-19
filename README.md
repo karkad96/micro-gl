@@ -174,9 +174,9 @@ requestAnimationFrame(frame);
 `LineGeometry(length = 1, thickness = 0.05, radialSegments = 8)` and
 `ArrowGeometry(length = 1, shaftWidth = 0.05, headLength = 0.25,
 headWidth = 0.2, radialSegments = 8)` have matching 2D variants without
-`radialSegments`. They run along local X and are centered over their full
-length. These are filled meshes with world-space thickness, so they use the
-default `triangle-list` material topology.
+`radialSegments`. They run along local X from the tail at the origin to the tip
+at `x = length`. These are filled meshes with world-space thickness, so they
+use the default `triangle-list` material topology.
 
 `GridHelper` creates an XZ ground grid for 3D scenes. `GridHelper2d` creates
 the matching XY grid for `Scene2d` and follows normal `zIndex` draw ordering.

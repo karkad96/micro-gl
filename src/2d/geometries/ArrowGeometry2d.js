@@ -1,7 +1,7 @@
 import { Geometry2d } from './Geometry2d.js';
 
 /**
- * A filled arrow centered on the origin and pointing along the local +x axis.
+ * A filled arrow starting at the origin and pointing along the local +x axis.
  * Dimensions are expressed in world-space units before Shape2d transforms.
  * The shaft and head use CCW triangles for the default triangle-list topology.
  */
@@ -12,12 +12,11 @@ export class ArrowGeometry2d extends Geometry2d {
     headLength = 0.25,
     headWidth = 0.2,
   ) {
-    const halfLength = length / 2;
     const halfShaftWidth = shaftWidth / 2;
     const halfHeadWidth = headWidth / 2;
-    const tailX = -halfLength;
-    const headBaseX = halfLength - headLength;
-    const tipX = halfLength;
+    const tailX = 0;
+    const headBaseX = length - headLength;
+    const tipX = length;
     const minX = Math.min(tailX, headBaseX, tipX);
     const maxX = Math.max(tailX, headBaseX, tipX);
     const halfUvHeight = Math.max(

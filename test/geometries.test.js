@@ -74,15 +74,15 @@ test('LineGeometry builds a centered capped tube', () => {
   assertUvRange(line, VERTEX_SIZE, 6);
 });
 
-test('ArrowGeometry builds a centered tube-and-cone arrow', () => {
+test('ArrowGeometry builds a tail-origin tube-and-cone arrow', () => {
   const arrow = new ArrowGeometry(4, 1, 1, 2, 4);
 
   assert.equal(arrow instanceof Geometry, true);
   assert.equal(arrow.vertexCount, 35);
   assert.equal(arrow.indexCount, 72);
   assert.deepEqual(arrow.bounds, {
-    min: [-2, -1, -1],
-    max: [2, 1, 1],
+    min: [0, -1, -1],
+    max: [4, 1, 1],
   });
   assertUnitNormalsAndWinding(arrow);
   assertUvRange(arrow, VERTEX_SIZE, 6);
@@ -107,7 +107,7 @@ test('LineGeometry2d builds a centered filled line with exact picking', () => {
   assertUvRange(line, 4, 2);
 });
 
-test('ArrowGeometry2d builds a centered filled arrow with exact picking', () => {
+test('ArrowGeometry2d builds a tail-origin filled arrow with exact picking', () => {
   const arrow = new ArrowGeometry2d(4, 1, 1, 2);
 
   assert.equal(arrow instanceof Geometry2d, true);
@@ -117,20 +117,21 @@ test('ArrowGeometry2d builds a centered filled arrow with exact picking', () => 
     Array.from(arrow.indices),
     [0, 1, 2, 0, 2, 3, 4, 5, 6],
   );
-  assert.deepEqual(arrow.bounds, { min: [-2, -1], max: [2, 1] });
+  assert.deepEqual(arrow.bounds, { min: [0, -1], max: [4, 1] });
 
-  assert.equal(arrow.containsPoint(-1.5, 0.4), true, 'shaft');
+  assert.equal(arrow.containsPoint(0, 0), true, 'tail origin');
+  assert.equal(arrow.containsPoint(0.5, 0.4), true, 'shaft');
   assert.equal(
-    arrow.containsPoint(-1.5, 0.75),
+    arrow.containsPoint(0.5, 0.75),
     false,
     'outside shaft but inside bounds',
   );
-  assert.equal(arrow.containsPoint(1.5, 0.4), true, 'tapered head');
+  assert.equal(arrow.containsPoint(3.5, 0.4), true, 'tapered head');
   assert.equal(
-    arrow.containsPoint(1.5, 0.6),
+    arrow.containsPoint(3.5, 0.6),
     false,
     'outside tapered head but inside bounds',
   );
-  assert.equal(arrow.containsPoint(2, 0), true, 'tip');
+  assert.equal(arrow.containsPoint(4, 0), true, 'tip');
   assertUvRange(arrow, 4, 2);
 });
