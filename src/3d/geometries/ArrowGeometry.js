@@ -8,7 +8,7 @@ import {
 } from './radialGeometry.js';
 
 /**
- * A filled arrow centered on the origin and pointing along the local +X axis.
+ * A filled arrow starting at the origin and pointing along the local +X axis.
  * The shaft is a circular tube and the head is a closed cone.
  */
 export class ArrowGeometry extends Geometry {
@@ -20,10 +20,9 @@ export class ArrowGeometry extends Geometry {
     radialSegments = 8,
   ) {
     radialSegments = normalizeRadialSegments(radialSegments);
-    const halfLength = length / 2;
-    const tailX = -halfLength;
-    const headBaseX = halfLength - headLength;
-    const tipX = halfLength;
+    const tailX = 0;
+    const headBaseX = length - headLength;
+    const tipX = length;
     const shaftRadius = shaftWidth / 2;
     const headRadius = headWidth / 2;
     const headBaseU = (headBaseX - tailX) / length;
