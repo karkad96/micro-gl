@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Scene } from '../src/3d/core/Scene.js';
 import { Object3d } from '../src/3d/core/Object3d.js';
 import { Renderer } from '../src/3d/core/Renderer.js';
+import { AmbientLight } from '../src/3d/lights/AmbientLight.js';
 import { DirectionalLight } from '../src/3d/lights/DirectionalLight.js';
 import { PointLight } from '../src/3d/lights/PointLight.js';
 import { MAX_POINT_LIGHTS } from '../src/3d/materials/Material.js';
@@ -14,6 +15,7 @@ const EPS = 1e-6;
 // Float offsets into the frame uniform data, matching Renderer.js.
 const DIRECTIONAL_LIGHT_DIRECTION = 16;
 const DIRECTIONAL_LIGHT_COLOR = 20;
+const AMBIENT_LIGHT_COLOR = 24;
 const POINT_LIGHT_COUNT = 27;
 const POINT_LIGHTS = 28;
 const POINT_LIGHT_STRIDE = 8;
@@ -27,6 +29,44 @@ function frameUniforms(scene) {
   renderer._writeFrameUniforms(scene, { viewProjectionMatrix: new Mat4() });
   return captured;
 }
+
+test('scenes without visible lights upload a neutral lighting multiplier', () => {
+  const scene = new Scene();
+  const hiddenLight = new AmbientLight([1, 0, 0], 10);
+  hiddenLight.visible = false;
+  scene.add(hiddenLight);
+
+  const data = frameUniforms(scene);
+  assert.deepEqual(
+    [...data.slice(DIRECTIONAL_LIGHT_COLOR, DIRECTIONAL_LIGHT_COLOR + 3)],
+    [0, 0, 0],
+  );
+  assert.equal(data[POINT_LIGHT_COUNT], 0);
+  for (const channel of data.slice(
+    AMBIENT_LIGHT_COLOR,
+    AMBIENT_LIGHT_COLOR + 3,
+  )) {
+    assert.equal(channel, 1);
+  }
+});
+
+test('any visible explicit light disables the neutral lightless fallback', () => {
+  for (const [label, light] of [
+    ['ambient', new AmbientLight([1, 1, 1], 0)],
+    ['directional', new DirectionalLight([1, 1, 1], 0)],
+    ['point', new PointLight([1, 1, 1], 0)],
+  ]) {
+    const scene = new Scene();
+    scene.add(light);
+
+    const data = frameUniforms(scene);
+    assert.deepEqual(
+      [...data.slice(AMBIENT_LIGHT_COLOR, AMBIENT_LIGHT_COLOR + 3)],
+      [0, 0, 0],
+      label,
+    );
+  }
+});
 
 test('directional light directions upload as finite unit vectors', () => {
   const scene = new Scene();
