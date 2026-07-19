@@ -18,6 +18,7 @@ import {
   create2dTransparencyFixture,
   create3dDirectionalLightDirectionFixture,
   create3dFrustumCullingFixture,
+  create3dLightlessLambertFixture,
   create3dMsaaResolveFixture,
   create3dPipelineFixture,
   create3dPixelFixture,
@@ -58,6 +59,7 @@ async function runSmokeTest() {
   let fixture3d = null;
   let fixture2d = null;
   let pixelFixture3d = null;
+  let lightlessLambertFixture3d = null;
   let directionalLightFixture3d = null;
   let frustumFixture3d = null;
   let shadowPixelFixture3d = null;
@@ -93,6 +95,7 @@ async function runSmokeTest() {
     fixture3d = create3dPipelineFixture(texture);
     fixture2d = create2dPipelineFixture(texture);
     pixelFixture3d = create3dPixelFixture();
+    lightlessLambertFixture3d = create3dLightlessLambertFixture();
     directionalLightFixture3d = create3dDirectionalLightDirectionFixture();
     frustumFixture3d = create3dFrustumCullingFixture();
     shadowPixelFixture3d = create3dShadowPixelFixture();
@@ -218,6 +221,7 @@ async function runSmokeTest() {
 
     let redPixel;
     let greenPixel;
+    let lightlessLambertPixel;
     const directionalLightPixels = {};
     let litGroundPixel;
     let shadowedGroundPixel;
@@ -241,8 +245,28 @@ async function runSmokeTest() {
         canvas.height,
       );
       assertDominantColor(greenPixel, 1, '2D green center pixel');
+
+      singleSample3d.render(
+        lightlessLambertFixture3d.scene,
+        lightlessLambertFixture3d.camera,
+      );
+      lightlessLambertPixel = await readCenterPixel(
+        device,
+        gpu.context,
+        gpu.format,
+        canvas.width,
+        canvas.height,
+      );
+      assertGrayPixel(
+        lightlessLambertPixel,
+        255,
+        'lightless Lambert center pixel',
+      );
     });
-    pass(checks, 'read back known red 3D and green 2D pixels');
+    pass(
+      checks,
+      'read back known 3D, 2D, and lightless Lambert pixels',
+    );
 
     await gpuPhase(device, 'invalid directional-light rendering', async () => {
       for (const [label, direction, expectedGray] of [
@@ -420,6 +444,7 @@ async function runSmokeTest() {
       pixels: {
         red3d: redPixel,
         green2d: greenPixel,
+        lightlessLambert3d: lightlessLambertPixel,
         directionalLights3d: directionalLightPixels,
         transparency: transparencyPixels,
         msaaResolve: msaaResolvePixels,
@@ -434,6 +459,9 @@ async function runSmokeTest() {
     if (fixture3d) disposeFixture(fixture3d);
     if (fixture2d) disposeFixture(fixture2d);
     if (pixelFixture3d) disposeFixture(pixelFixture3d);
+    if (lightlessLambertFixture3d) {
+      disposeFixture(lightlessLambertFixture3d);
+    }
     if (directionalLightFixture3d) {
       disposeFixture(directionalLightFixture3d);
     }

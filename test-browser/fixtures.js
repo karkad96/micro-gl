@@ -303,6 +303,25 @@ export function create3dPixelFixture() {
   };
 }
 
+/** A Lambert sphere with no explicit lights, exercising neutral shading. */
+export function create3dLightlessLambertFixture() {
+  const geometry = new SphereGeometry(0.9, 24, 16);
+  const scene = new Scene();
+  scene.background = [0, 0, 0, 1];
+  scene.add(
+    new Mesh(geometry, new LambertMaterial({ color: [1, 1, 1, 1] })),
+  );
+  const camera = new PerspectiveCamera(55, 1, 0.1, 10);
+  camera.position.set(0, 0, 3);
+  camera.lookAt(0, 0, 0);
+  return {
+    scene,
+    camera,
+    geometries: new Set([geometry]),
+    objects: scene.children,
+  };
+}
+
 /** A white +Y plane lit only by one mutable directional light. */
 export function create3dDirectionalLightDirectionFixture() {
   const geometry = new PlaneGeometry(3, 3);

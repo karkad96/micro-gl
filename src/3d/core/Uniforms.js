@@ -16,6 +16,9 @@ const FRAME_HEADER_FLOATS = MAT4_FLOATS + 3 * PADDED_VEC3_FLOATS;
 const POINT_LIGHT_FLOATS = 2 * PADDED_VEC3_FLOATS;
 const MATRIX_TRANSLATION_OFFSET = 3 * VEC4_FLOATS;
 const POINT_LIGHT_COLOR_OFFSET = PADDED_VEC3_FLOATS;
+// With no explicit light, diffuse lighting is the identity so authored
+// material and texture colors pass through unchanged.
+const LIGHTLESS_COLOR_MULTIPLIER = 1;
 
 export const FRAME_UNIFORM_SIZE =
   (FRAME_HEADER_FLOATS + MAX_POINT_LIGHTS * POINT_LIGHT_FLOATS) * FLOAT_BYTES;
@@ -53,20 +56,32 @@ export class FrameUniformWriter {
     let ambientRed = 0;
     let ambientGreen = 0;
     let ambientBlue = 0;
+    let hasVisibleLight = false;
 
     scene.traverseVisible((object) => {
-      if (!directionalLight && object instanceof DirectionalLight) {
-        directionalLight = object;
+      if (object instanceof DirectionalLight) {
+        hasVisibleLight = true;
+        if (!directionalLight) directionalLight = object;
       }
-      if (object instanceof PointLight && pointLightCount < MAX_POINT_LIGHTS) {
-        this._writePointLight(pointLightCount++, object);
+      if (object instanceof PointLight) {
+        hasVisibleLight = true;
+        if (pointLightCount < MAX_POINT_LIGHTS) {
+          this._writePointLight(pointLightCount++, object);
+        }
       }
       if (object instanceof AmbientLight) {
+        hasVisibleLight = true;
         ambientRed += srgbToLinear(object.color[0]) * object.intensity;
         ambientGreen += srgbToLinear(object.color[1]) * object.intensity;
         ambientBlue += srgbToLinear(object.color[2]) * object.intensity;
       }
     });
+
+    if (!hasVisibleLight) {
+      ambientRed = LIGHTLESS_COLOR_MULTIPLIER;
+      ambientGreen = LIGHTLESS_COLOR_MULTIPLIER;
+      ambientBlue = LIGHTLESS_COLOR_MULTIPLIER;
+    }
 
     data.set(camera.viewProjectionMatrix.elements, FRAME_OFFSET.viewProjection);
     data[FRAME_OFFSET.pointLightCount] = pointLightCount;
