@@ -171,12 +171,34 @@ requestAnimationFrame(frame);
 - **Interaction:** `PanZoomControls`, `DragControls2d`
 - **Helpers:** `GridHelper2d`
 
-`LineGeometry(length = 1, thickness = 0.05, radialSegments = 8)` and
+`LineGeometry(length = 1, thickness = 0.05, radialSegments = 8)` is centered
+on the origin from `x = -length / 2` to `x = length / 2`.
 `ArrowGeometry(length = 1, shaftWidth = 0.05, headLength = 0.25,
-headWidth = 0.2, radialSegments = 8)` have matching 2D variants without
-`radialSegments`. They run along local X from the tail at the origin to the tip
-at `x = length`. These are filled meshes with world-space thickness, so they
-use the default `triangle-list` material topology.
+headWidth = 0.2, radialSegments = 8)` starts at the origin and points along
+local +X to `x = length`. Their matching 2D variants omit `radialSegments`.
+All four are filled meshes with world-space thickness and use the default
+`triangle-list` material topology.
+
+Aim either primitive with `setDirection` on its `Mesh` or `Shape2d`. The
+direction is parent-local and may be given as numeric components, a `Vec2` or
+`Vec3`, or an array. Its magnitude is ignored, so geometry length and object
+scale remain in control:
+
+```js
+const arrow = new Mesh(new ArrowGeometry(2), material);
+arrow.position.set(1, 2, 3); // the arrow's tail
+arrow.setDirection(0, 1, 0);
+
+const line2d = new Shape2d(new LineGeometry2d(2), material2d);
+line2d.position.set(1, 2); // the line's midpoint
+line2d.setDirection([1, 1]);
+```
+
+A direction must be finite and non-zero. Calling `setDirection` on an
+`InstancedMesh` or `InstancedShape2d` aims the whole batch. For independent
+per-instance directions, build each matrix with
+`Mat4.composeDirection(position, direction, scale)` or the matching `Mat3`
+method, then pass it to `setMatrixAt`.
 
 `GridHelper` creates an XZ ground grid for 3D scenes. `GridHelper2d` creates
 the matching XY grid for `Scene2d` and follows normal `zIndex` draw ordering.

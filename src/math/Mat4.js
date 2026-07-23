@@ -1,3 +1,5 @@
+import { normalizeDirection3d } from './direction.js';
+
 /**
  * A 4x4 matrix stored in column-major order (same layout WebGPU expects
  * inside uniform buffers, so `elements` can be uploaded directly).
@@ -159,6 +161,55 @@ export class Mat4 {
     if (scale.x !== 1 || scale.y !== 1 || scale.z !== 1) {
       this.multiply(_tmp.makeScale(scale.x, scale.y, scale.z));
     }
+    return this;
+  }
+
+  /**
+   * Builds a TRS transform with local +X aligned to `direction`.
+   * Direction magnitude is ignored; position and scale are unchanged.
+   */
+  composeDirection(position, direction, scale) {
+    const [xx, xy, xz] = normalizeDirection3d(direction);
+    const horizontalLength = Math.hypot(xx, xz);
+    let yx;
+    let yy;
+    let yz;
+    let zx;
+    let zz;
+
+    if (horizontalLength === 0) {
+      // At the +Y/-Y poles, keep local +Z fixed and choose a stable local +Y.
+      yx = -xy;
+      yy = 0;
+      yz = 0;
+      zx = 0;
+      zz = 1;
+    } else {
+      zx = -xz / horizontalLength;
+      zz = xx / horizontalLength;
+      // local Y = local Z cross local X, completing a right-handed basis.
+      yx = -xx * xy / horizontalLength;
+      yy = horizontalLength;
+      yz = -xz * xy / horizontalLength;
+    }
+
+    const e = this.elements;
+    e[0] = xx * scale.x;
+    e[1] = xy * scale.x;
+    e[2] = xz * scale.x;
+    e[3] = 0;
+    e[4] = yx * scale.y;
+    e[5] = yy * scale.y;
+    e[6] = yz * scale.y;
+    e[7] = 0;
+    e[8] = zx * scale.z;
+    e[9] = 0;
+    e[10] = zz * scale.z;
+    e[11] = 0;
+    e[12] = position.x;
+    e[13] = position.y;
+    e[14] = position.z;
+    e[15] = 1;
     return this;
   }
 
