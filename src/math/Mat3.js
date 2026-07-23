@@ -1,3 +1,5 @@
+import { normalizeDirection2d } from './direction.js';
+
 /**
  * A 3x3 matrix for 2D affine transforms (translation, rotation, scale).
  *
@@ -120,6 +122,24 @@ export class Mat3 {
     e[1] = s * scale.x;
     e[4] = -s * scale.y;
     e[5] = c * scale.y;
+    e[8] = position.x;
+    e[9] = position.y;
+    e[10] = 1;
+    return this;
+  }
+
+  /**
+   * Builds T * R * S with local +X aligned to `direction`.
+   * Direction magnitude is ignored; position and scale are unchanged.
+   */
+  composeDirection(position, direction, scale) {
+    const [dx, dy] = normalizeDirection2d(direction);
+    const e = this.elements;
+    e.fill(0);
+    e[0] = dx * scale.x;
+    e[1] = dy * scale.x;
+    e[4] = -dy * scale.y;
+    e[5] = dx * scale.y;
     e[8] = position.x;
     e[9] = position.y;
     e[10] = 1;

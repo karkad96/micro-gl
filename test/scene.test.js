@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Object3d } from '../src/3d/core/Object3d.js';
 import { Object2d } from '../src/2d/core/Object2d.js';
 import { Mesh } from '../src/3d/core/Mesh.js';
+import { Shape2d } from '../src/2d/core/Shape2d.js';
 import { Raycaster } from '../src/3d/core/Raycaster.js';
 import { PerspectiveCamera } from '../src/3d/cameras/PerspectiveCamera.js';
 import { BoxGeometry } from '../src/3d/geometries/BoxGeometry.js';
@@ -18,6 +19,21 @@ function assertClose(actual, expected, message = '') {
     Math.abs(actual - expected) < EPS,
     `${message} expected ${expected}, got ${actual}`,
   );
+}
+
+function assertDirection3d(matrix, expected, message = '') {
+  const e = matrix.elements;
+  const length = Math.hypot(e[0], e[1], e[2]);
+  assertClose(e[0] / length, expected[0], `${message} x:`);
+  assertClose(e[1] / length, expected[1], `${message} y:`);
+  assertClose(e[2] / length, expected[2], `${message} z:`);
+}
+
+function assertDirection2d(matrix, expected, message = '') {
+  const e = matrix.elements;
+  const length = Math.hypot(e[0], e[1]);
+  assertClose(e[0] / length, expected[0], `${message} x:`);
+  assertClose(e[1] / length, expected[1], `${message} y:`);
 }
 
 test('add() reparents: an object has one parent at a time', () => {
@@ -76,6 +92,78 @@ test('updateWorldMatrix chains parent transforms (2D)', () => {
   parent.updateWorldMatrix();
   const e = child.worldMatrix.elements;
   assert.deepEqual([e[8], e[9]], [1, 2]);
+});
+
+test('Mesh.setDirection aligns local +X in parent space for every overload', () => {
+  const parent = new Object3d();
+  parent.rotation.z = Math.PI / 2;
+  const mesh = new Mesh(new BoxGeometry(), {});
+  parent.add(mesh);
+
+  assert.equal(mesh.setDirection(0, 0, -7), mesh);
+  parent.updateWorldMatrix();
+  assertDirection3d(mesh.localMatrix, [0, 0, -1], 'numeric');
+
+  assert.equal(mesh.setDirection({ x: 3, y: 4, z: 0 }), mesh);
+  parent.updateWorldMatrix();
+  assertDirection3d(mesh.localMatrix, [0.6, 0.8, 0], 'object local');
+  assertDirection3d(mesh.worldMatrix, [-0.8, 0.6, 0], 'object world');
+
+  assert.equal(mesh.setDirection([0, -5, 0]), mesh);
+  parent.updateWorldMatrix();
+  assertDirection3d(mesh.localMatrix, [0, -1, 0], 'array');
+});
+
+test('Shape2d.setDirection aligns local +X in parent space for every overload', () => {
+  const parent = new Object2d();
+  parent.rotation = Math.PI / 2;
+  const shape = new Shape2d(new RectGeometry(), {});
+  parent.add(shape);
+
+  assert.equal(shape.setDirection(0, -7), shape);
+  parent.updateWorldMatrix();
+  assertDirection2d(shape.localMatrix, [0, -1], 'numeric');
+
+  assert.equal(shape.setDirection({ x: 3, y: 4 }), shape);
+  parent.updateWorldMatrix();
+  assertDirection2d(shape.localMatrix, [0.6, 0.8], 'object local');
+  assertDirection2d(shape.worldMatrix, [-0.8, 0.6], 'object world');
+
+  assert.equal(shape.setDirection([0, -5]), shape);
+  parent.updateWorldMatrix();
+  assertDirection2d(shape.localMatrix, [0, -1], 'array');
+});
+
+test('setDirection rejects invalid directions without changing rotation', () => {
+  const mesh = new Mesh(new BoxGeometry(), {});
+  mesh.rotation.set(0.2, -0.3, 0.4);
+  const rotation3d = [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z];
+  const invalid3d = [
+    () => mesh.setDirection(0, 0, 0),
+    () => mesh.setDirection({ x: 1, y: Infinity, z: 0 }),
+    () => mesh.setDirection([1, 0, Number.NaN]),
+    () => mesh.setDirection({ x: 1, y: 0 }),
+  ];
+  for (const setInvalidDirection of invalid3d) {
+    assert.throws(setInvalidDirection, RangeError);
+    assert.deepEqual(
+      [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      rotation3d,
+    );
+  }
+
+  const shape = new Shape2d(new RectGeometry(), {});
+  shape.rotation = 0.7;
+  const invalid2d = [
+    () => shape.setDirection(0, 0),
+    () => shape.setDirection({ x: -Infinity, y: 1 }),
+    () => shape.setDirection([Number.NaN, 1]),
+    () => shape.setDirection({ x: 1 }),
+  ];
+  for (const setInvalidDirection of invalid2d) {
+    assert.throws(setInvalidDirection, RangeError);
+    assert.equal(shape.rotation, 0.7);
+  }
 });
 
 test('traverseVisible skips an invisible object and its whole subtree', () => {

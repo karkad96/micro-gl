@@ -102,12 +102,94 @@ test('Mat4.compose applies translation, rotation and scale in TRS order', () => 
   assertClose(p.z, 0);
 });
 
+test('Mat4.composeDirection aligns +X and preserves translation and scale', () => {
+  const position = new Vec3(5, -2, 7);
+  const scale = new Vec3(2, 3, 4);
+  const m = new Mat4();
+
+  assert.equal(
+    m.composeDirection(position, { x: 3, y: 4, z: 0 }, scale),
+    m,
+  );
+  // prettier-ignore
+  assertElementsClose(m, [1.2, 1.6, 0, 0,  -2.4, 1.8, 0, 0,  0, 0, 4, 0,  5, -2, 7, 1]);
+
+  const scaledArrayDirection = new Mat4().composeDirection(
+    position,
+    [30, 40, 0],
+    scale,
+  );
+  assertElementsClose(scaledArrayDirection, m.elements);
+});
+
+test('Mat4.composeDirection uses a stable basis for vertical directions', () => {
+  const m = new Mat4().composeDirection(
+    new Vec3(5, -2, 7),
+    [0, 9, 0],
+    new Vec3(2, 3, 4),
+  );
+  // Local +X points up while local +Z remains world +Z at the pole.
+  // prettier-ignore
+  assertElementsClose(m, [0, 2, 0, 0,  -3, 0, 0, 0,  0, 0, 4, 0,  5, -2, 7, 1]);
+});
+
 test('Mat3.compose applies translation, rotation and scale in TRS order', () => {
   const m = new Mat3().compose(new Vec2(5, -1), Math.PI / 2, new Vec2(3, 3));
   // (1,0) scaled to (3,0), rotated to (0,3), moved to (5,2).
   const p = new Vec2(1, 0).applyMat3(m);
   assertClose(p.x, 5);
   assertClose(p.y, 2);
+});
+
+test('Mat3.composeDirection aligns +X and preserves translation and scale', () => {
+  const position = new Vec2(5, -1);
+  const scale = new Vec2(2, 3);
+  const m = new Mat3();
+
+  assert.equal(m.composeDirection(position, { x: 3, y: 4 }, scale), m);
+  // prettier-ignore
+  assertElementsClose(m, [1.2, 1.6, 0, 0,  -2.4, 1.8, 0, 0,  5, -1, 1, 0]);
+
+  const scaledArrayDirection = new Mat3().composeDirection(
+    position,
+    [30, 40],
+    scale,
+  );
+  assertElementsClose(scaledArrayDirection, m.elements);
+});
+
+test('composeDirection rejects invalid directions without mutation', () => {
+  const m4 = new Mat4().compose(
+    new Vec3(1, 2, 3),
+    new Vec3(0.2, 0.3, 0.4),
+    new Vec3(2, 3, 4),
+  );
+  const before4 = [...m4.elements];
+  for (const direction of [
+    [0, 0, 0],
+    { x: 1, y: Infinity, z: 0 },
+    [1, 0, Number.NaN],
+  ]) {
+    assert.throws(
+      () => m4.composeDirection(new Vec3(), direction, new Vec3(1, 1, 1)),
+      RangeError,
+    );
+    assert.deepEqual([...m4.elements], before4);
+  }
+
+  const m3 = new Mat3().compose(new Vec2(1, 2), 0.7, new Vec2(2, 3));
+  const before3 = [...m3.elements];
+  for (const direction of [
+    [0, 0],
+    { x: -Infinity, y: 1 },
+    [Number.NaN, 1],
+  ]) {
+    assert.throws(
+      () => m3.composeDirection(new Vec2(), direction, new Vec2(1, 1)),
+      RangeError,
+    );
+    assert.deepEqual([...m3.elements], before3);
+  }
 });
 
 test('Mat3.invert undoes an affine transform', () => {
