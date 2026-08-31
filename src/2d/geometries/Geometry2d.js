@@ -13,7 +13,8 @@
 export class Geometry2d {
   /**
    * @param {Float32Array|number[]} vertices interleaved vertex data
-   * @param {Uint32Array|number[]}  indices  triangle indices
+   * @param {Uint32Array|number[]}  indices  vertex indices, interpreted using
+   *   the material's primitive topology
    */
   constructor(vertices, indices) {
     this.vertices =
