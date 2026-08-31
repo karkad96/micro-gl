@@ -155,7 +155,10 @@ requestAnimationFrame(frame);
 - **Scene and objects:** `Scene`, `Object3d`, `Mesh`, `InstancedMesh`
 - **Cameras:** `PerspectiveCamera`, `OrthographicCamera`
 - **Geometry:** `BoxGeometry`, `SphereGeometry`, `PlaneGeometry`,
-  `LineGeometry`, `ArrowGeometry`, `WireframeGeometry`, `Geometry`
+  `CylinderGeometry`, `ConeGeometry`, `DiskGeometry`, `RingGeometry`,
+  `TorusGeometry`, `CapsuleGeometry`, `LatheGeometry`, `TubeGeometry`,
+  `ExtrudeGeometry`, `LineGeometry`, `ArrowGeometry`, `WireframeGeometry`,
+  `EdgesGeometry`, `Geometry`
 - **Materials:** `BasicMaterial`, `LambertMaterial`, `TextureMaterial`
 - **Lighting:** `DirectionalLight`, `AmbientLight`, `PointLight`
 - **Interaction:** `OrbitControls`, `DragControls`, `Raycaster`
@@ -165,11 +168,47 @@ requestAnimationFrame(frame);
 
 - **Scene and objects:** `Scene2d`, `Object2d`, `Shape2d`, `InstancedShape2d`
 - **Camera:** `Camera2d`
-- **Geometry:** `RectGeometry`, `CircleGeometry`, `LineGeometry2d`,
-  `ArrowGeometry2d`, `Geometry2d`
+- **Geometry:** `RectGeometry`, `RoundedRectGeometry`, `CircleGeometry`,
+  `CircleOutlineGeometry`, `ArcOutlineGeometry`, `RingGeometry2d`,
+  `PolylineGeometry2d`, `LineGeometry2d`, `ArrowGeometry2d`, `Geometry2d`
 - **Materials:** `BasicMaterial2d`, `SpriteMaterial2d`
 - **Interaction:** `PanZoomControls`, `DragControls2d`
 - **Helpers:** `GridHelper2d`
+
+`CircleGeometry(radius = 0.5, segments = 32)` creates a filled disk.
+`CircleOutlineGeometry(radius = 0.5, segments = 32, options)` creates only its
+perimeter as a closed `line-list`:
+
+```js
+const outline = new Shape2d(
+  new CircleOutlineGeometry(1, 64),
+  new BasicMaterial2d({
+    color: [1, 0.2, 0.2],
+    topology: 'line-list',
+  }),
+);
+```
+
+Native WebGPU lines are one device pixel wide. The optional
+`{ hitTolerance: 0.05 }` is a local-space picking tolerance only; it does not
+change the rendered width.
+
+`ArcOutlineGeometry(radius = 0.5, startAngle = 0, sweepAngle = Math.PI,
+segments = 32, options)` creates the matching open `line-list` arc. Positive
+sweeps run counter-clockwise and negative sweeps run clockwise.
+
+The remaining 2D additions are filled `triangle-list` meshes:
+
+- `RingGeometry2d(innerRadius = 0.25, outerRadius = 0.5, segments = 32,
+  { startAngle = 0, sweepAngle = 2 * Math.PI })` creates rings, thick arcs,
+  and pie sectors when `innerRadius` is zero.
+- `RoundedRectGeometry(width = 1, height = 1, radius = 0.1,
+  cornerSegments = 4)` clamps the radius to half the shortest side.
+- `PolylineGeometry2d(points = [[-0.5, 0], [0.5, 0]], thickness = 0.05,
+  { closed = false, join = 'miter', cap = 'butt', miterLimit = 4,
+  roundSegments = 8 })` tessellates a world-space stroke. Tessellated regions
+  can overlap at self-intersections and sharp inner turns, so transparent
+  strokes may accumulate alpha there.
 
 `LineGeometry(length = 1, thickness = 0.05, radialSegments = 8)` is centered
 on the origin from `x = -length / 2` to `x = length / 2`.
@@ -193,6 +232,51 @@ const line2d = new Shape2d(new LineGeometry2d(2), material2d);
 line2d.position.set(1, 2); // the line's midpoint
 line2d.setDirection([1, 1]);
 ```
+
+The additional 3D `triangle-list` generators are:
+
+- `PlaneGeometry(width = 1, depth = 1, widthSegments = 1,
+  depthSegments = 1)` for a subdivided XZ plane.
+- `CylinderGeometry(radiusTop = 1, radiusBottom = 1, height = 1,
+  radialSegments = 24, heightSegments = 1, openEnded = false)` and
+  `ConeGeometry(radius = 1, height = 1, radialSegments = 24,
+  heightSegments = 1, openEnded = false)`, centered on the Y axis.
+- `DiskGeometry(radius = 1, segments = 32, thetaStart = 0,
+  thetaLength = 2 * Math.PI)` and `RingGeometry(innerRadius = 0.5,
+  outerRadius = 1, thetaSegments = 32, phiSegments = 1, thetaStart = 0,
+  thetaLength = 2 * Math.PI)`, lying in the XZ plane and facing +Y. Signed
+  `thetaLength` values select either angular direction.
+- `TorusGeometry(radius = 1, tube = 0.25, radialSegments = 16,
+  tubularSegments = 32, arc = 2 * Math.PI)` and
+  `CapsuleGeometry(radius = 0.5, length = 1, capSegments = 8,
+  radialSegments = 16)`. The torus's signed `arc` selects either angular
+  direction, and its tube must be smaller than its major radius; capsule
+  `length` is its straight body length.
+- `LatheGeometry(profilePoints, radialSegments = 24,
+  { startAngle = 0, sweepAngle = 2 * Math.PI })` revolves a `[radius, y]`
+  profile. List profile points from lower to upper for outward-facing normals.
+- `TubeGeometry(pathPoints, radius = 0.1, radialSegments = 8,
+  { closed = false, cap = !closed })` follows a piecewise-linear 3D path.
+  Open tubes are capped by default.
+- `ExtrudeGeometry(polygonPoints, depth = 1)` extrudes a simple convex or
+  concave polygon along Z. Holes, bevels, and self-intersections are rejected.
+
+`EdgesGeometry(source, thresholdAngle = 1)` extracts boundary and crease
+edges from an indexed `triangle-list` geometry while suppressing coplanar
+diagonals. `thresholdAngle` is measured in degrees. Like `WireframeGeometry`,
+draw it with a `line-list` material.
+
+Partial disk, ring, torus, and lathe sweeps leave their cut boundaries open.
+`PlaneGeometry`, `DiskGeometry`, and `RingGeometry` are single-sided with the
+default back-face culling; set a material's `cullMode` to `'none'` to show both
+sides. In 3D, line-list geometry does not cast shadows and is not intersected
+by `Raycaster`; transparent meshes also do not cast shadows.
+
+Native one-pixel points can be authored with `Geometry` or `Geometry2d` and a
+material whose topology is `'point-list'`. Sized point sprites and particle
+systems need a billboard/material rendering path, so they are not presented as
+a dedicated geometry class. Built-in generators reject parameters that become
+non-finite or collapse into degenerate primitives after Float32 conversion.
 
 A direction must be finite and non-zero. Calling `setDirection` on an
 `InstancedMesh` or `InstancedShape2d` aims the whole batch. For independent

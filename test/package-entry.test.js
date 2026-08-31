@@ -10,10 +10,25 @@ test('the package name resolves to the complete public entry point', () => {
   }
 });
 
-test('line, arrow and grid helpers are part of the public API', () => {
+test('geometry and helper additions are part of the public API', () => {
   for (const name of [
     'LineGeometry',
     'ArrowGeometry',
+    'CylinderGeometry',
+    'ConeGeometry',
+    'DiskGeometry',
+    'RingGeometry',
+    'TorusGeometry',
+    'CapsuleGeometry',
+    'LatheGeometry',
+    'TubeGeometry',
+    'ExtrudeGeometry',
+    'EdgesGeometry',
+    'CircleOutlineGeometry',
+    'ArcOutlineGeometry',
+    'RingGeometry2d',
+    'RoundedRectGeometry',
+    'PolylineGeometry2d',
     'LineGeometry2d',
     'ArrowGeometry2d',
     'GridHelper',

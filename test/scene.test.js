@@ -334,6 +334,12 @@ test('CircleGeometry.containsPoint is exact, not a bounding-box test', () => {
   assert.equal(circle.containsPoint(0.45, 0.45), false);
 });
 
+test('CircleGeometry rejects degenerate dimensions and segment counts', () => {
+  assert.throws(() => new CircleGeometry(0), /radius must be/);
+  assert.throws(() => new CircleGeometry(1, Infinity), /segments must be/);
+  assert.equal(new CircleGeometry(1, 2).segments, 3);
+});
+
 test('RectGeometry.containsPoint tests the bounds', () => {
   const rect = new RectGeometry(2, 1);
   assert.equal(rect.containsPoint(0.9, 0.4), true);

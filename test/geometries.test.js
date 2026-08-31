@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ArrowGeometry2d } from '../src/2d/geometries/ArrowGeometry2d.js';
+import { CircleOutlineGeometry } from '../src/2d/geometries/CircleOutlineGeometry.js';
 import { Geometry2d } from '../src/2d/geometries/Geometry2d.js';
 import { LineGeometry2d } from '../src/2d/geometries/LineGeometry2d.js';
 import { ArrowGeometry } from '../src/3d/geometries/ArrowGeometry.js';
@@ -91,6 +92,40 @@ test('ArrowGeometry builds a tail-origin tube-and-cone arrow', () => {
 test('3D line and arrow geometries enforce at least three radial segments', () => {
   assert.equal(new LineGeometry(1, 0.1, 2).vertexCount, 16);
   assert.equal(new ArrowGeometry(1, 0.05, 0.25, 0.2, 2).vertexCount, 27);
+});
+
+test('CircleOutlineGeometry builds a closed line list with hollow picking', () => {
+  const circle = new CircleOutlineGeometry(2, 4, { hitTolerance: 0.1 });
+
+  assert.equal(circle instanceof Geometry2d, true);
+  assert.equal(circle.vertexCount, 4);
+  assert.equal(circle.indexCount, 8);
+  assert.deepEqual(
+    Array.from(circle.indices),
+    [0, 1, 1, 2, 2, 3, 3, 0],
+  );
+  assert.deepEqual(circle.bounds, { min: [-2, -2], max: [2, 2] });
+  assert.equal(circle.containsPoint(0, 0), false);
+  assert.equal(circle.containsPoint(1, 1), true, 'point on polygon edge');
+  assert.equal(circle.containsPoint(1.95, 0), true);
+  assert.equal(circle.containsPoint(1.8, 0), false);
+  assertUvRange(circle, 4, 2);
+});
+
+test('CircleOutlineGeometry enforces three segments and valid hit tolerance', () => {
+  assert.equal(new CircleOutlineGeometry(1, 2).vertexCount, 3);
+  assert.throws(
+    () => new CircleOutlineGeometry(0),
+    /radius must be a finite positive number/,
+  );
+  assert.throws(
+    () => new CircleOutlineGeometry(1, Infinity),
+    /segments must be a finite non-negative number/,
+  );
+  assert.throws(
+    () => new CircleOutlineGeometry(1, 16, { hitTolerance: -0.1 }),
+    /hitTolerance must be finite and non-negative/,
+  );
 });
 
 test('LineGeometry2d builds a centered filled line with exact picking', () => {
