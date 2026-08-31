@@ -11,9 +11,24 @@
 <body>
   <canvas id="canvas"></canvas>
   <div id="hud">
-    <button id="btn-3d" class="active">3D scene</button>
-    <button id="btn-2d">2D scene</button>
-    <button id="btn-stress">Stress: off</button>
+    <div class="speed-control">
+      <label for="simulation-speed">Simulation speed</label>
+      <input
+        id="simulation-speed"
+        type="range"
+        min="0"
+        max="4"
+        step="0.1"
+        value="1"
+      />
+      <output id="simulation-speed-value" for="simulation-speed">1.0×</output>
+    </div>
+    <div class="charge-legend" aria-label="Particle charge colors">
+      <span><i class="charge-swatch positive"></i>Positive</span>
+      <span><i class="charge-swatch negative"></i>Negative</span>
+      <span><i class="charge-swatch neutral"></i>Neutral</span>
+    </div>
+    <div class="hud-hint">0× pauses · T switches camera · reload randomizes</div>
   </div>
   <div id="fps">
     <div><span class="num" id="fps-value">--</span> fps</div>
