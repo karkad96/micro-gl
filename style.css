@@ -28,34 +28,76 @@ canvas {
   top: 12px;
   left: 12px;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 290px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(18, 22, 34, 0.88);
+  color: #ccd0df;
   font:
     13px system-ui,
     sans-serif;
   user-select: none;
 }
-#hud button {
-  padding: 6px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  background: rgba(18, 22, 34, 0.85);
-  color: #99a;
+.speed-control {
+  display: grid;
+  grid-template-columns: auto minmax(100px, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+}
+#simulation-speed {
+  width: 100%;
+  margin: 0;
+  accent-color: #8e83ff;
   cursor: pointer;
 }
-#hud button:hover {
+#simulation-speed:focus-visible {
+  outline: 2px solid #c4bdff;
+  outline-offset: 2px;
+}
+#simulation-speed-value {
   color: #fff;
+  font:
+    600 13px ui-monospace,
+    Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
-#hud button.active {
-  background: #33508f;
-  border-color: #4a6ab8;
-  color: #fff;
+.charge-legend {
+  display: flex;
+  gap: 14px;
+  color: #aeb3c5;
+  font-size: 12px;
 }
-#btn-stress {
-  margin-left: 10px;
+.charge-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
-#btn-stress.active {
-  background: #8f3350;
-  border-color: #b84a6a;
+.charge-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+.charge-swatch.positive {
+  color: #ff3030;
+  background: currentColor;
+}
+.charge-swatch.negative {
+  color: #306cff;
+  background: currentColor;
+}
+.charge-swatch.neutral {
+  color: #ffe030;
+  background: currentColor;
+}
+.hud-hint {
+  color: #777f96;
+  font-size: 11px;
 }
 #fps {
   position: fixed;
