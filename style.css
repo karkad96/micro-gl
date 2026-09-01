@@ -30,7 +30,8 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  min-width: 290px;
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 24px));
   padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
@@ -41,8 +42,44 @@ canvas {
     sans-serif;
   user-select: none;
 }
+.model-control {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.model-control legend {
+  margin-bottom: 5px;
+  color: #aeb3c5;
+  font-size: 12px;
+}
+.model-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.model-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #aeb3c5;
+  cursor: pointer;
+}
+.model-option:has(input:checked) {
+  border-color: rgba(51, 122, 255, 0.8);
+  background: rgba(51, 122, 255, 0.2);
+  color: #fff;
+}
+.model-option input {
+  margin: 0;
+  accent-color: #337aff;
+}
 .scene-legend {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   color: #aeb3c5;
   font-size: 12px;
@@ -95,4 +132,14 @@ canvas {
   font-size: 18px;
   font-weight: 600;
   color: #fff;
+}
+
+@media (max-width: 720px) {
+  #geodesic-stats {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    text-align: left;
+  }
 }

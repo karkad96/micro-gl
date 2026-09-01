@@ -3,20 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>micro-gl &mdash; rational Poincar&eacute; geodesics</title>
+    <title>micro-gl &mdash; Poincar&eacute; and Klein geodesics</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
 
   <body>
     <canvas id="canvas"></canvas>
     <div id="hud">
-      <strong>Unit-disk geodesics through rational points</strong>
+      <strong>Rational geodesics in the unit disk</strong>
+      <fieldset class="model-control" aria-describedby="model-explanation">
+        <legend>Disk model</legend>
+        <div class="model-options">
+          <label class="model-option" for="model-poincare">
+            <input
+              id="model-poincare"
+              type="radio"
+              name="disk-model"
+              value="poincare"
+              checked
+            />
+            Poincar&eacute;
+          </label>
+          <label class="model-option" for="model-klein">
+            <input
+              id="model-klein"
+              type="radio"
+              name="disk-model"
+              value="klein"
+            />
+            Klein
+          </label>
+        </div>
+      </fieldset>
+      <div id="model-explanation" class="hud-hint" aria-live="polite">
+        Poincar&eacute; geodesics are boundary-orthogonal arcs; diameters are
+        the straight special case.
+      </div>
       <div class="scene-legend" aria-label="Scene colors">
         <span><i class="scene-swatch boundary"></i>Boundary</span>
-        <span><i class="scene-swatch geodesic"></i>Geodesics</span>
-        <span><i class="scene-swatch point"></i>Rational points</span>
+        <span
+          ><i class="scene-swatch geodesic"></i
+          ><span id="geodesic-label">Orthogonal arcs</span></span
+        >
+        <span
+          ><i class="scene-swatch point"></i
+          ><span id="point-label">Rational points</span></span
+        >
       </div>
-      <div class="hud-hint">Each coordinate is reduced p/q with q &le; N</div>
+      <div class="hud-hint">
+        Source Poincar&eacute; coordinates are reduced p/q with q &le; N
+      </div>
       <div class="hud-hint">
         Right-drag to pan &middot; wheel or pinch to zoom
       </div>
