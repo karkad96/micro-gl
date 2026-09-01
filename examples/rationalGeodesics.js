@@ -1,7 +1,7 @@
 const ZERO = Object.freeze({ numerator: 0n, denominator: 1n });
 const ONE = Object.freeze({ numerator: 1n, denominator: 1n });
 const TWO = Object.freeze({ numerator: 2n, denominator: 1n });
-const MAX_DENOMINATOR_LIMIT = 12;
+const MAX_DENOMINATOR_LIMIT = 8;
 
 /**
  * Builds unit-disk geodesics through bounded rational points.
