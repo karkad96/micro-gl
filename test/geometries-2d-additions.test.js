@@ -62,6 +62,135 @@ test('ArcOutlineGeometry builds an open signed line-list arc', () => {
   assert.deepEqual(Array.from(clockwise.indices), [0, 1]);
 });
 
+test('ArcOutlineGeometry.fromPoints builds translated minor and major arcs', () => {
+  const center = new Vec2(2, 3);
+  const start = new Float32Array([3, 3]);
+  const end = { x: 2, y: 4 };
+  const arc = ArcOutlineGeometry.fromPoints({
+    center,
+    start,
+    end,
+    segments: 2,
+    hitTolerance: 0.02,
+  });
+
+  assert.deepEqual(arc.center, [2, 3]);
+  assert.equal(arc.radius, 1);
+  assert.ok(Math.abs(arc.startAngle) < 1e-12);
+  assert.ok(Math.abs(arc.sweepAngle - Math.PI / 2) < 1e-12);
+  assert.ok(Math.abs(arc.vertices[0] - 3) < 1e-6);
+  assert.ok(Math.abs(arc.vertices[1] - 3) < 1e-6);
+  const endOffset = (arc.vertexCount - 1) * VERTEX_SIZE;
+  assert.ok(Math.abs(arc.vertices[endOffset] - 2) < 1e-6);
+  assert.ok(Math.abs(arc.vertices[endOffset + 1] - 4) < 1e-6);
+  assert.equal(arc.containsPoint(2, 3), false);
+  assert.deepEqual(Array.from(start), [3, 3], 'input is not mutated');
+
+  const clockwise = ArcOutlineGeometry.fromPoints({
+    center: [0, 0],
+    start: [1, 0],
+    end: [0, -1],
+    segments: 1,
+  });
+  assert.ok(Math.abs(clockwise.sweepAngle + Math.PI / 2) < 1e-12);
+
+  const large = ArcOutlineGeometry.fromPoints({
+    center: [0, 0],
+    start: [1, 0],
+    end: [0, 1],
+    largeArc: true,
+  });
+  assert.ok(Math.abs(large.sweepAngle + (Math.PI * 3) / 2) < 1e-12);
+
+  const semicircle = ArcOutlineGeometry.fromPoints({
+    center: [2, 3],
+    start: [3, 3],
+    end: [1, 3],
+    segments: 2,
+  });
+  assert.equal(semicircle.sweepAngle, Math.PI);
+  assert.ok(Math.abs(semicircle.vertices[4] - 2) < 1e-6);
+  assert.ok(Math.abs(semicircle.vertices[5] - 4) < 1e-6);
+
+  const complementarySemicircle = ArcOutlineGeometry.fromPoints({
+    center: [2, 3],
+    start: [3, 3],
+    end: [1, 3],
+    segments: 2,
+    largeArc: true,
+  });
+  assert.equal(complementarySemicircle.sweepAngle, -Math.PI);
+  assert.ok(Math.abs(complementarySemicircle.vertices[4] - 2) < 1e-6);
+  assert.ok(Math.abs(complementarySemicircle.vertices[5] - 2) < 1e-6);
+});
+
+test('ArcOutlineGeometry.fromPoints validates its named point form', () => {
+  assert.throws(() => ArcOutlineGeometry.fromPoints(), /options/);
+  assert.throws(
+    () =>
+      ArcOutlineGeometry.fromPoints({
+        center: [0, 0],
+        start: [1, 0],
+        end: [0, 1],
+        largeArc: 'yes',
+      }),
+    /largeArc must be a boolean/,
+  );
+  assert.throws(
+    () =>
+      ArcOutlineGeometry.fromPoints({
+        center: [0, 0],
+        start: [0, 0],
+        end: [0, 1],
+      }),
+    /must differ from center/,
+  );
+  assert.throws(
+    () =>
+      ArcOutlineGeometry.fromPoints({
+        center: [0, 0],
+        start: [1, 0],
+        end: [0, 2],
+      }),
+    /same distance from center/,
+  );
+  assert.throws(
+    () =>
+      ArcOutlineGeometry.fromPoints({
+        center: [0, 0],
+        start: [1, 0],
+        end: [1, 0],
+      }),
+    /must define different directions/,
+  );
+  assert.throws(
+    () =>
+      ArcOutlineGeometry.fromPoints({
+        center: [0, 0],
+        start: [1, 0],
+        end: [0, Infinity],
+      }),
+    /coordinates must be finite/,
+  );
+  assert.throws(
+    () =>
+      ArcOutlineGeometry.fromPoints({
+        center: [1e10, 1e10],
+        start: [1e10 + 100, 1e10],
+        end: [1e10, 1e10 + 100],
+      }),
+    /line that collapses in Float32/,
+  );
+
+  assert.doesNotThrow(() =>
+    ArcOutlineGeometry.fromPoints({
+      center: [0, 0],
+      start: [1, 0],
+      end: [0, 1 + 5e-7],
+    }),
+  );
+});
+
 test('ArcOutlineGeometry validates dimensions, angles, segments, and picking tolerance', () => {
   assert.equal(new ArcOutlineGeometry(1, 0, 1, 0).segments, 1);
   assert.throws(() => new ArcOutlineGeometry(-1), /radius must be/);

@@ -41,65 +41,40 @@ canvas {
     sans-serif;
   user-select: none;
 }
-.speed-control {
-  display: grid;
-  grid-template-columns: auto minmax(100px, 1fr) 48px;
-  align-items: center;
-  gap: 10px;
-}
-#simulation-speed {
-  width: 100%;
-  margin: 0;
-  accent-color: #8e83ff;
-  cursor: pointer;
-}
-#simulation-speed:focus-visible {
-  outline: 2px solid #c4bdff;
-  outline-offset: 2px;
-}
-#simulation-speed-value {
-  color: #fff;
-  font:
-    600 13px ui-monospace,
-    Consolas,
-    monospace;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-.charge-legend {
+.scene-legend {
   display: flex;
   gap: 14px;
   color: #aeb3c5;
   font-size: 12px;
 }
-.charge-legend span {
+.scene-legend span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
-.charge-swatch {
+.scene-swatch {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   box-shadow: 0 0 6px currentColor;
 }
-.charge-swatch.positive {
-  color: #ff3030;
+.scene-swatch.boundary {
+  color: #ff3330;
   background: currentColor;
 }
-.charge-swatch.negative {
-  color: #306cff;
+.scene-swatch.geodesic {
+  color: #2ef26b;
   background: currentColor;
 }
-.charge-swatch.neutral {
-  color: #ffe030;
+.scene-swatch.point {
+  color: #337aff;
   background: currentColor;
 }
 .hud-hint {
   color: #777f96;
   font-size: 11px;
 }
-#fps {
+#geodesic-stats {
   position: fixed;
   top: 12px;
   right: 12px;
@@ -108,12 +83,15 @@ canvas {
   border-radius: 6px;
   background: rgba(18, 22, 34, 0.85);
   color: #99a;
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  font:
+    12px/1.5 ui-monospace,
+    Consolas,
+    monospace;
   text-align: right;
   user-select: none;
   pointer-events: none;
 }
-#fps .num {
+#geodesic-stats .num {
   font-size: 18px;
   font-weight: 600;
   color: #fff;
