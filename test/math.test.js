@@ -50,6 +50,24 @@ test('Mat4.invert undoes compose', () => {
   assertElementsClose(product, IDENTITY4);
 });
 
+test('Mat4.determinant handles transforms and a general 4x4 matrix', () => {
+  assert.equal(new Mat4().determinant(), 1);
+  assert.equal(new Mat4().makeScale(-2, 3, 4).determinant(), -24);
+  assert.equal(new Mat4().makeScale(1, 0, 1).determinant(), 0);
+
+  const general = new Mat4();
+  // Logical rows: [1,2,3,4], [5,6,7,8], [2,6,4,8], [3,1,1,2].
+  general.elements.set([
+    1, 5, 2, 3,
+    2, 6, 6, 1,
+    3, 7, 4, 1,
+    4, 8, 8, 2,
+  ]);
+  const before = [...general.elements];
+  assert.equal(general.determinant(), 72);
+  assert.deepEqual([...general.elements], before, 'determinant is read-only');
+});
+
 test('Mat4.transpose applied twice is the original', () => {
   const m = new Mat4().compose(
     new Vec3(1, 2, 3),
@@ -199,6 +217,23 @@ test('Mat3.invert undoes an affine transform', () => {
     .applyMat3(new Mat3().copy(m).invert());
   assertClose(p.x, 4);
   assertClose(p.y, -2);
+});
+
+test('Mat3.determinant ignores padding and supports non-affine matrices', () => {
+  assert.equal(new Mat3().determinant(), 1);
+  assert.equal(new Mat3().makeScale(-2, 3).determinant(), -6);
+  assert.equal(new Mat3().makeScale(0, 3).determinant(), 0);
+
+  const general = new Mat3();
+  // Logical rows: [1,2,3], [0,4,5], [1,0,6]. Padding is deliberately noisy.
+  general.elements.set([
+    1, 0, 1, 101,
+    2, 4, 0, 102,
+    3, 5, 6, 103,
+  ]);
+  const before = [...general.elements];
+  assert.equal(general.determinant(), 22);
+  assert.deepEqual([...general.elements], before, 'determinant is read-only');
 });
 
 test('Mat3.multiplyMatrices is safe when the target aliases an operand', () => {

@@ -312,6 +312,49 @@ export class Mat4 {
     return this;
   }
 
+  /** Returns the determinant of this 4x4 matrix. */
+  determinant() {
+    const e = this.elements;
+    const a00 = e[0],
+      a01 = e[1],
+      a02 = e[2],
+      a03 = e[3];
+    const a10 = e[4],
+      a11 = e[5],
+      a12 = e[6],
+      a13 = e[7];
+    const a20 = e[8],
+      a21 = e[9],
+      a22 = e[10],
+      a23 = e[11];
+    const a30 = e[12],
+      a31 = e[13],
+      a32 = e[14],
+      a33 = e[15];
+
+    const b00 = a00 * a11 - a01 * a10;
+    const b01 = a00 * a12 - a02 * a10;
+    const b02 = a00 * a13 - a03 * a10;
+    const b03 = a01 * a12 - a02 * a11;
+    const b04 = a01 * a13 - a03 * a11;
+    const b05 = a02 * a13 - a03 * a12;
+    const b06 = a20 * a31 - a21 * a30;
+    const b07 = a20 * a32 - a22 * a30;
+    const b08 = a20 * a33 - a23 * a30;
+    const b09 = a21 * a32 - a22 * a31;
+    const b10 = a21 * a33 - a23 * a31;
+    const b11 = a22 * a33 - a23 * a32;
+
+    return (
+      b00 * b11 -
+      b01 * b10 +
+      b02 * b09 +
+      b03 * b08 -
+      b04 * b07 +
+      b05 * b06
+    );
+  }
+
   /** Inverts this matrix, throwing when no inverse exists. */
   invert() {
     if (!this.tryInvert()) {

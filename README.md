@@ -13,7 +13,7 @@ in a large framework.
 - Separate 2D and 3D renderers with a familiar scene/object model
 - Perspective, orthographic, and 2D cameras
 - Built-in geometry, materials, textures, transparency, and MSAA
--  , ambient, and point lights with directional shadows
+- , ambient, and point lights with directional shadows
 - Scene hierarchies, frustum culling, raycasting, and drag controls
 - Instanced 2D and 3D drawing for large object counts
 - Mouse, touch, and trackpad camera controls
@@ -197,16 +197,37 @@ change the rendered width.
 segments = 32, options)` creates the matching open `line-list` arc. Positive
 sweeps run counter-clockwise and negative sweeps run clockwise.
 
+For an arc defined by points, use the named factory instead of calculating
+angles or passing positional arguments:
+
+```js
+const arc = ArcOutlineGeometry.fromPoints({
+  center: [2, 1],
+  start: [3, 1],
+  end: [2, 2],
+  segments: 24,
+});
+```
+
+`center`, `start`, and `end` accept arrays, typed arrays, `Vec2`, or
+`{ x, y }`. The endpoints must lie at the same radius and define different
+directions from the center. The shorter signed arc is selected by default; set
+`largeArc: true` for the complementary arc, which runs in the opposite
+direction. Antipodal endpoints select the counter-clockwise semicircle by
+default and the clockwise semicircle with `largeArc: true`. The generated
+vertices remain in the supplied points' coordinate space, so the arc begins at
+`start` and ends at `end`.
+
 The remaining 2D additions are filled `triangle-list` meshes:
 
 - `RingGeometry2d(innerRadius = 0.25, outerRadius = 0.5, segments = 32,
-  { startAngle = 0, sweepAngle = 2 * Math.PI })` creates rings, thick arcs,
+{ startAngle = 0, sweepAngle = 2 * Math.PI })` creates rings, thick arcs,
   and pie sectors when `innerRadius` is zero.
 - `RoundedRectGeometry(width = 1, height = 1, radius = 0.1,
-  cornerSegments = 4)` clamps the radius to half the shortest side.
+cornerSegments = 4)` clamps the radius to half the shortest side.
 - `PolylineGeometry2d(points = [[-0.5, 0], [0.5, 0]], thickness = 0.05,
-  { closed = false, join = 'miter', cap = 'butt', miterLimit = 4,
-  roundSegments = 8 })` tessellates a world-space stroke. Tessellated regions
+{ closed = false, join = 'miter', cap = 'butt', miterLimit = 4,
+roundSegments = 8 })` tessellates a world-space stroke. Tessellated regions
   can overlap at self-intersections and sharp inner turns, so transparent
   strokes may accumulate alpha there.
 
@@ -236,27 +257,27 @@ line2d.setDirection([1, 1]);
 The additional 3D `triangle-list` generators are:
 
 - `PlaneGeometry(width = 1, depth = 1, widthSegments = 1,
-  depthSegments = 1)` for a subdivided XZ plane.
+depthSegments = 1)` for a subdivided XZ plane.
 - `CylinderGeometry(radiusTop = 1, radiusBottom = 1, height = 1,
-  radialSegments = 24, heightSegments = 1, openEnded = false)` and
+radialSegments = 24, heightSegments = 1, openEnded = false)` and
   `ConeGeometry(radius = 1, height = 1, radialSegments = 24,
-  heightSegments = 1, openEnded = false)`, centered on the Y axis.
+heightSegments = 1, openEnded = false)`, centered on the Y axis.
 - `DiskGeometry(radius = 1, segments = 32, thetaStart = 0,
-  thetaLength = 2 * Math.PI)` and `RingGeometry(innerRadius = 0.5,
-  outerRadius = 1, thetaSegments = 32, phiSegments = 1, thetaStart = 0,
-  thetaLength = 2 * Math.PI)`, lying in the XZ plane and facing +Y. Signed
+thetaLength = 2 * Math.PI)` and `RingGeometry(innerRadius = 0.5,
+outerRadius = 1, thetaSegments = 32, phiSegments = 1, thetaStart = 0,
+thetaLength = 2 * Math.PI)`, lying in the XZ plane and facing +Y. Signed
   `thetaLength` values select either angular direction.
 - `TorusGeometry(radius = 1, tube = 0.25, radialSegments = 16,
-  tubularSegments = 32, arc = 2 * Math.PI)` and
+tubularSegments = 32, arc = 2 * Math.PI)` and
   `CapsuleGeometry(radius = 0.5, length = 1, capSegments = 8,
-  radialSegments = 16)`. The torus's signed `arc` selects either angular
+radialSegments = 16)`. The torus's signed `arc` selects either angular
   direction, and its tube must be smaller than its major radius; capsule
   `length` is its straight body length.
 - `LatheGeometry(profilePoints, radialSegments = 24,
-  { startAngle = 0, sweepAngle = 2 * Math.PI })` revolves a `[radius, y]`
+{ startAngle = 0, sweepAngle = 2 * Math.PI })` revolves a `[radius, y]`
   profile. List profile points from lower to upper for outward-facing normals.
 - `TubeGeometry(pathPoints, radius = 0.1, radialSegments = 8,
-  { closed = false, cap = !closed })` follows a piecewise-linear 3D path.
+{ closed = false, cap = !closed })` follows a piecewise-linear 3D path.
   Open tubes are capped by default.
 - `ExtrudeGeometry(polygonPoints, depth = 1)` extrudes a simple convex or
   concave polygon along Z. Holes, bevels, and self-intersections are rejected.
@@ -291,6 +312,8 @@ the matching XY grid for `Scene2d` and follows normal `zIndex` draw ordering.
 
 - `Texture` loads image assets for both engines
 - `Vec2`, `Vec3`, `Mat3`, and `Mat4` provide transform math
+- `Mat3.determinant()` and `Mat4.determinant()` return the determinant without
+  modifying the matrix
 - Colors use arrays of normalized sRGB values: `[r, g, b]` or
   `[r, g, b, alpha]`
 
@@ -335,8 +358,34 @@ npm install
 npx serve .
 ```
 
-Open `http://localhost:3000`. The demo can switch between the 2D and 3D
-renderers and includes interaction and stress tests.
+Open `http://localhost:3000`. The demo draws geodesics in the open unit disk
+through at least three bounded rational points. Each coordinate independently
+ranges over the unique reduced fractions `p/q` in `(-1, 1)` with `q <= N`, and
+points outside `x^2 + y^2 < 1` are removed. Curved geodesics are circular arcs
+that meet the unit circle at right angles; lines through the origin are rendered
+as the diameter special case. With `N = 3`, the generator produces 49 rational
+points, 40 curved geodesics, and 16 diameters. The counter displays `T(N)`, the
+number of ordered triples of distinct sampled points on those geodesics.
+Right-drag to pan, and use the wheel or a pinch gesture to zoom.
+
+The number of drawn geodesics and `T(N)` are different quantities. A geodesic
+containing `k` sampled points is drawn once, but it contributes
+`k * (k - 1) * (k - 2)` ordered triples. Consequently, at `N = 2` the four
+diameters each contain three points, giving `T(2) = 4 * 3 * 2 * 1 = 24`. At
+`N = 3`, 44 geodesics contain three points, eight arcs contain four points, and
+four diameters contain seven points, giving
+`T(3) = 44 * 6 + 8 * 24 + 4 * 210 = 1296`.
+
+At `N = 2`, the nine sampled points yield those four diameters: every nonzero
+point appears with its negative, and the origin gives the third point. Mixed
+nonzero denominators first appear at `N = 3`; for example, the circle centered
+at `(5/3, 1/6)` passes exactly through `(1/3, 0)`, `(1/3, 1/3)`, and
+`(1/2, -1/2)`. Its squared radius is `65/36`, so the squared center distance is
+`101/36 = 1 + 65/36`, proving that it meets the unit boundary orthogonally. The
+demo uses reduced `BigInt` fractions to identify these incidences exactly and
+converts to floating-point coordinates only when creating render geometry.
+The example accepts `1 <= N <= 8`; `N <= 6` is recommended for quick startup,
+because the number of rational-point pairs grows rapidly.
 
 ## Tests
 

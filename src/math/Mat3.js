@@ -146,6 +146,26 @@ export class Mat3 {
     return this;
   }
 
+  /** Returns the determinant of the logical 3x3 matrix. */
+  determinant() {
+    const e = this.elements;
+    const a11 = e[0],
+      a12 = e[4],
+      a13 = e[8];
+    const a21 = e[1],
+      a22 = e[5],
+      a23 = e[9];
+    const a31 = e[2],
+      a32 = e[6],
+      a33 = e[10];
+
+    return (
+      a11 * (a22 * a33 - a23 * a32) -
+      a12 * (a21 * a33 - a23 * a31) +
+      a13 * (a21 * a32 - a22 * a31)
+    );
+  }
+
   /**
    * Inverts the matrix, assuming it is affine (bottom row 0 0 1), and
    * throws when no inverse exists. Every matrix this engine composes is affine.
