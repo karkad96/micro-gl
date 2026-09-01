@@ -358,15 +358,28 @@ npm install
 npx serve .
 ```
 
-Open `http://localhost:3000`. The demo draws geodesics in the open unit disk
-through at least three bounded rational points. Each coordinate independently
-ranges over the unique reduced fractions `p/q` in `(-1, 1)` with `q <= N`, and
-points outside `x^2 + y^2 < 1` are removed. Curved geodesics are circular arcs
-that meet the unit circle at right angles; lines through the origin are rendered
-as the diameter special case. With `N = 3`, the generator produces 49 rational
-points, 40 curved geodesics, and 16 diameters. The counter displays `T(N)`, the
-number of ordered triples of distinct sampled points on those geodesics.
-Right-drag to pan, and use the wheel or a pinch gesture to zoom.
+Open `http://localhost:3000`. The demo switches between the Poincaré and Klein
+models of the open unit disk. Source Poincaré points independently range over
+the unique reduced fractions `p/q` in `(-1, 1)` with `q <= N`; points outside
+`x^2 + y^2 < 1` are removed. In the Poincaré view, curved geodesics are circular
+arcs meeting the unit boundary at right angles, with diameters as the straight
+special case. The Klein view maps the same points and geodesics with
+
+```text
+K(p) = 2p / (1 + |p|^2)
+P(k) = k / (1 + sqrt(1 - |k|^2))
+```
+
+The radial map fixes the unit boundary and turns every Poincaré geodesic into
+the straight chord between the same ideal endpoints. Mapped Klein coordinates
+remain rational, but their denominators need not be bounded by `N`; that bound
+describes the source Poincaré point set. The model selector preserves the
+camera, support-point identities, geodesic counts, and `T(N)`. Right-drag to
+pan, and use the wheel or a pinch gesture to zoom.
+
+With `N = 3`, the generator produces 49 source rational points, 40 curved
+geodesics, and 16 diameters. The counter displays `T(N)`, the number of ordered
+triples of distinct sampled points on those geodesics.
 
 The number of drawn geodesics and `T(N)` are different quantities. A geodesic
 containing `k` sampled points is drawn once, but it contributes
